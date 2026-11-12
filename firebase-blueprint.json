@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "NewsItem": {
+      "title": "News Item",
+      "description": "A news article published on the website",
+      "type": "object",
+      "properties": {
+        "headline": { "type": "string", "maxLength": 200 },
+        "subtitle": { "type": "string", "maxLength": 500 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "summary": { "type": "string", "maxLength": 1000 },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "imageCaption": { "type": "string", "maxLength": 500 },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "category": { "type": "string", "enum": ["News", "Economy", "Infrastructure", "Updates", "Business", "Technology", "International"] },
+        "language": { "type": "string", "enum": ["Kinyarwanda", "English"] },
+        "status": { "type": "string", "enum": ["published", "draft", "scheduled"] },
+        "author": { "type": "string" },
+        "featured": { "type": "boolean" },
+        "views": { "type": "integer" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "seoTitle": { "type": "string", "maxLength": 100 },
+        "seoDescription": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["headline", "slug", "content", "publishedAt", "category", "language", "status", "author"]
+    },
+    "Opportunity": {
+      "title": "Opportunity",
+      "description": "A job, scholarship, tender, or other opportunity",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "organization": { "type": "string", "maxLength": 200 },
+        "organizationLogo": { "type": "string" },
+        "location": { "type": "string" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "category": { "type": "string", "enum": ["Jobs", "Scholarships", "Tenders", "Others"] },
+        "subCategory": { "type": "string" },
+        "type": { "type": "string" },
+        "salary": { "type": "string" },
+        "description": { "type": "string" },
+        "responsibilities": { "type": "string" },
+        "qualifications": { "type": "string" },
+        "requirements": { "type": "string" },
+        "benefits": { "type": "string" },
+        "applicationInstructions": { "type": "string" },
+        "applyUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "draft", "expired"] },
+        "views": { "type": "integer" },
+        "clicks": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "featured": { "type": "boolean" },
+        "institution": { "type": "string" },
+        "country": { "type": "string" },
+        "scholarshipType": { "type": "string" },
+        "requiredDocuments": { "type": "string" },
+        "tenderRef": { "type": "string" },
+        "issuingOrg": { "type": "string" },
+        "submissionInstructions": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "contactInfo": { "type": "string" }
+      },
+      "required": ["title", "slug", "organization", "deadline", "category", "description", "applyUrl", "status"]
+    },
+    "WebPage": {
+      "title": "Web Page",
+      "description": "A static page like About Us or Privacy Policy",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 100 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "content": { "type": "string" },
+        "status": { "type": "string", "enum": ["published", "draft"] },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "seoTitle": { "type": "string", "maxLength": 100 },
+        "seoDescription": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["title", "slug", "content", "status", "lastUpdated"]
+    },
+    "AdminUser": {
+      "title": "Admin User",
+      "description": "A user with administrative access",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "editor", "content_manager", "user"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] }
+      },
+      "required": ["email", "role", "status"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "A newsletter subscriber",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "subscribedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "unsubscribed"] }
+      },
+      "required": ["email", "subscribedAt", "status"]
+    },
+    "AnalyticsEvent": {
+      "title": "Analytics Event",
+      "description": "A page view or click event",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["page_view", "click"] },
+        "path": { "type": "string" },
+        "visitorId": { "type": "string" },
+        "device": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "targetId": { "type": "string" }
+      },
+      "required": ["type", "timestamp"]
+    },
+    "ActivityLog": {
+      "title": "Activity Log",
+      "description": "A log of administrative activity",
+      "type": "object",
+      "properties": {
+        "adminId": { "type": "string" },
+        "adminName": { "type": "string" },
+        "action": { "type": "string" },
+        "module": { "type": "string" },
+        "targetId": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminId", "action", "module", "timestamp"]
+    },
+    "Settings": {
+      "title": "Website Settings",
+      "description": "Global website configurations",
+      "type": "object",
+      "properties": {
+        "websiteName": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "faviconUrl": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "address": { "type": "string" },
+        "socialLinks": {
+          "type": "object",
+          "properties": {
+            "facebook": { "type": "string" },
+            "twitter": { "type": "string" },
+            "linkedin": { "type": "string" },
+            "youtube": { "type": "string" }
+          }
+        },
+        "seo": {
+          "type": "object",
+          "properties": {
+            "defaultTitle": { "type": "string" },
+            "defaultDescription": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "news": {
+      "schema": "NewsItem",
+      "description": "Collection of news articles"
+    },
+    "opportunities": {
+      "schema": "Opportunity",
+      "description": "Collection of jobs, scholarships, tenders, etc."
+    },
+    "pages": {
+      "schema": "WebPage",
+      "description": "Collection of static website pages"
+    },
+    "users": {
+      "schema": "AdminUser",
+      "description": "Collection of administrative users"
+    },
+    "subscribers": {
+      "schema": "Subscriber",
+      "description": "Collection of newsletter subscribers"
+    },
+    "analytics": {
+      "schema": "AnalyticsEvent",
+      "description": "Collection of site analytics events"
+    },
+    "activityLogs": {
+      "schema": "ActivityLog",
+      "description": "Collection of administrative activity logs"
+    },
+    "settings": {
+      "schema": "Settings",
+      "description": "Global website settings"
+    }
+  }
+}

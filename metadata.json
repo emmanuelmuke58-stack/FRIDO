@@ -1,0 +1,6 @@
+{
+  "name": "Rwanda Opportunities",
+  "description": "More Opportunities. A Stronger Rwanda. A trusted online platform for news, jobs, scholarships, tenders, and more.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

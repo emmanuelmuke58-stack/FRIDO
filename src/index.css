@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-montserrat: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply font-inter text-[#102B4E] antialiased overflow-x-hidden;
+  }
+
+  h1 {
+    @apply text-[27px] md:text-5xl lg:text-6xl font-extrabold font-montserrat leading-tight text-balance;
+  }
+
+  h2 {
+    @apply text-[21px] md:text-3xl lg:text-4xl font-extrabold font-montserrat leading-tight text-balance;
+  }
+
+  p {
+    @apply text-base md:text-lg leading-[1.6] md:leading-[1.8];
+  }
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}

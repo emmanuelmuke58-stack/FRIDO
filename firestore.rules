@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function hasRole(role) {
+      return isVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
+    }
+    
+    function isAdmin() {
+      return isVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             (getUserData().role == 'admin' || getUserData().role == 'super_admin' || getUserData().role == 'editor');
+    }
+    
+    function isSuperAdmin() {
+      return hasRole('super_admin');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // News
+    match /news/{articleId} {
+      allow read: if articleId != null; // Public read
+      allow create, update, delete: if isAdmin();
+      
+      function isValidNews(data) {
+        return data.headline is string && data.headline.size() <= 200 &&
+               data.slug is string && data.slug.matches('^[a-z0-9-]+$') &&
+               data.content is string &&
+               data.status in ['published', 'draft', 'scheduled'];
+      }
+    }
+
+    // Opportunities
+    match /opportunities/{oppId} {
+      allow read: if oppId != null; // Public read
+      allow create, update, delete: if isAdmin();
+      
+      function isValidOpportunity(data) {
+        return data.title is string && data.title.size() <= 200 &&
+               data.slug is string && data.slug.matches('^[a-z0-9-]+$') &&
+               data.category in ['Jobs', 'Scholarships', 'Tenders', 'Others'] &&
+               data.status in ['active', 'draft', 'expired'];
+      }
+    }
+
+    // Pages
+    match /pages/{pageId} {
+      allow read: if pageId != null;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Users (RBAC)
+    match /users/{userId} {
+      allow read: if isVerified() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSuperAdmin() || (isVerified() && request.auth.token.email == 'emmanuelmuke58@gmail.com');
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // Subscribers
+    match /subscribers/{subId} {
+      allow create: if incoming().email is string && incoming().email.size() <= 100;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Messages (Contact Form)
+    match /messages/{messageId} {
+      allow create: if incoming().email is string && incoming().email.size() <= 100;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Analytics
+    match /analytics/{eventId} {
+      allow create: if incoming().type in ['page_view', 'click'];
+      allow read: if isAdmin();
+    }
+
+    // Activity Logs
+    match /activityLogs/{logId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin();
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if settingId != null;
+      allow write: if isSuperAdmin();
+    }
+  }
+}
