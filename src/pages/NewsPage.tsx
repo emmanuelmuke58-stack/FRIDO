@@ -1,7 +1,5 @@
 import React from 'react';
 import {
-  Calendar,
-  ArrowRight,
   Clock,
   Search,
   X,
@@ -11,10 +9,9 @@ import {
 } from 'lucide-react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CategoryItem, NewsItem } from '@/src/types';
-import { cn, safeFormatDate } from '@/src/lib/utils';
+import { cn, formatRelativeTime, safeFormatDate } from '@/src/lib/utils';
 import {
   fetchPublicPortalData,
-  calculateReadingTime,
   PUBLIC_DATA_UPDATED_EVENT,
 } from '@/src/lib/publicData';
 import { STATIC_ASSETS, resolveAssetUrl } from '@/src/lib/assets';
@@ -28,13 +25,32 @@ const CANONICAL_NEWS_CATEGORIES: { slug: string; label: string; aliases: string[
   { slug: 'international', label: 'International', aliases: ['international', 'world'] },
 ];
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
+
+function getPaginationRange(currentPage: number, totalPages: number): (number | 'ellipsis')[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+
+  const pages: (number | 'ellipsis')[] = [1];
+  const left = Math.max(2, currentPage - 1);
+  const right = Math.min(totalPages - 1, currentPage + 1);
+
+  if (left > 2) pages.push('ellipsis');
+  for (let p = left; p <= right; p++) {
+    pages.push(p);
+  }
+  if (right < totalPages - 1) pages.push('ellipsis');
+  pages.push(totalPages);
+
+  return pages;
+}
 
 export function NewsListingPage() {
   const { category } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   const langParam = searchParams.get('lang') || '';
   const initialQuery = searchParams.get('q') || '';
@@ -43,8 +59,9 @@ export function NewsListingPage() {
   const [dbCategories, setDbCategories] = React.useState<CategoryItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState(initialQuery);
-  const [sortBy, setSortBy] = React.useState<'newest'| 'most_read'>('newest');
+  const [sortBy, setSortBy] = React.useState<'newest' | 'most_read'>('newest');
   const [page, setPage] = React.useState(1);
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
 
   const loadData = React.useCallback(async (force = false) => {
     setLoading(true);
@@ -66,17 +83,28 @@ export function NewsListingPage() {
     return () => window.removeEventListener(PUBLIC_DATA_UPDATED_EVENT, onUpdate);
   }, [loadData]);
 
+  // Keep relative timestamps accurate while page remains open
+  React.useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync URL query param `?q=` changes if user searches from header
+  React.useEffect(() => {
+    setSearchTerm(searchParams.get('q') || '');
+  }, [searchParams]);
+
+  // Always reset to page 1 whenever filters, search, language, or sort change
   React.useEffect(() => {
     setPage(1);
   }, [category, langParam, searchTerm, sortBy]);
 
   const categoryFilters = React.useMemo(() => {
-    const items: { slug: string; label: string; path: string; aliases: string[] }[] = CANONICAL_NEWS_CATEGORIES.map(
-      (cat) => ({
+    const items: { slug: string; label: string; path: string; aliases: string[] }[] =
+      CANONICAL_NEWS_CATEGORIES.map((cat) => ({
         ...cat,
         path: `/news/category/${cat.slug}`,
-      })
-    );
+      }));
 
     const knownSlugs = new Set(items.map((i) => i.slug.toLowerCase()));
     const knownAliases = new Set(items.flatMap((i) => i.aliases));
@@ -98,10 +126,16 @@ export function NewsListingPage() {
   }, [dbCategories]);
 
   const activeLanguage = React.useMemo(() => {
-    if (langParam.toLowerCase() === 'kinyarwanda'|| category?.toLowerCase() === 'rwanda-kinyarwanda') {
+    if (
+      langParam.toLowerCase() === 'kinyarwanda' ||
+      category?.toLowerCase() === 'rwanda-kinyarwanda'
+    ) {
       return 'Kinyarwanda';
     }
-    if (langParam.toLowerCase() === 'english'|| category?.toLowerCase() === 'rwanda-english') {
+    if (
+      langParam.toLowerCase() === 'english' ||
+      category?.toLowerCase() === 'rwanda-english'
+    ) {
       return 'English';
     }
     return 'All';
@@ -110,7 +144,7 @@ export function NewsListingPage() {
   const activeCategoryObj = React.useMemo(() => {
     if (!category) return null;
     const lower = category.toLowerCase();
-    if (lower === 'rwanda-kinyarwanda'|| lower === 'rwanda-english') return null;
+    if (lower === 'rwanda-kinyarwanda' || lower === 'rwanda-english') return null;
     return (
       categoryFilters.find(
         (c) => c.slug.toLowerCase() === lower || c.aliases.includes(lower)
@@ -125,15 +159,28 @@ export function NewsListingPage() {
 
   const activeDbCategory = React.useMemo(() => {
     if (!activeCategoryObj) return null;
-    return dbCategories.find(
-      (c) =>
-        c.slug.toLowerCase() === activeCategoryObj.slug.toLowerCase() ||
-        c.name.toLowerCase() === activeCategoryObj.label.toLowerCase()
-    ) || null;
+    return (
+      dbCategories.find(
+        (c) =>
+          c.slug.toLowerCase() === activeCategoryObj.slug.toLowerCase() ||
+          c.name.toLowerCase() === activeCategoryObj.label.toLowerCase()
+      ) || null
+    );
   }, [activeCategoryObj, dbCategories]);
 
   const filteredNews = React.useMemo(() => {
-    let items = [...allNews];
+    // Deduplicate strictly by id and slug so duplicate cards never render
+    const seenIds = new Set<string>();
+    const seenSlugs = new Set<string>();
+    let items: NewsItem[] = [];
+
+    for (const n of allNews) {
+      if (!n || !n.id || !n.slug) continue;
+      if (seenIds.has(n.id) || seenSlugs.has(n.slug)) continue;
+      seenIds.add(n.id);
+      seenSlugs.add(n.slug);
+      items.push(n);
+    }
 
     if (activeCategoryObj) {
       const aliasSet = new Set(activeCategoryObj.aliases.map((a) => a.toLowerCase()));
@@ -183,11 +230,15 @@ export function NewsListingPage() {
     return filteredNews.slice(start, start + PAGE_SIZE);
   }, [filteredNews, currentPage]);
 
-  const showLeadStory = currentPage === 1 && pageItems.length > 0 && !searchTerm.trim();
-  const leadStory = showLeadStory ? pageItems[0] : null;
-  const gridStories = showLeadStory ? pageItems.slice(1) : pageItems;
+  const paginationRange = React.useMemo(
+    () => getPaginationRange(currentPage, totalPages),
+    [currentPage, totalPages]
+  );
 
-  const handleLanguageSelect = (targetLang: 'All'| 'Kinyarwanda'| 'English') => {
+  const rangeStart = filteredNews.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(filteredNews.length, currentPage * PAGE_SIZE);
+
+  const handleLanguageSelect = (targetLang: 'All' | 'Kinyarwanda' | 'English') => {
     const next = new URLSearchParams(searchParams);
     if (targetLang === 'All') {
       next.delete('lang');
@@ -195,7 +246,10 @@ export function NewsListingPage() {
       next.set('lang', targetLang);
     }
 
-    if (category?.toLowerCase() === 'rwanda-kinyarwanda'|| category?.toLowerCase() === 'rwanda-english') {
+    if (
+      category?.toLowerCase() === 'rwanda-kinyarwanda' ||
+      category?.toLowerCase() === 'rwanda-english'
+    ) {
       const qs = next.toString();
       navigate(qs ? `/news?${qs}` : '/news');
       return;
@@ -211,36 +265,52 @@ export function NewsListingPage() {
     navigate('/news');
   };
 
+  const goToPage = (targetPage: number) => {
+    const clamped = Math.max(1, Math.min(totalPages, targetPage));
+    if (clamped === currentPage) return;
+    setPage(clamped);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const pageHeading = activeCategoryObj
     ? `${activeCategoryObj.label} ${t('nav.news')}`
-    : activeLanguage !== 'All'? `${t('news.title')} (${activeLanguage})`
+    : activeLanguage !== 'All'
+      ? `${t('news.title')} (${activeLanguage})`
       : t('news.title');
 
   return (
-    <div className="bg-[#F8FAFC] min-h-screen py-6 md:py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    <div className="bg-[#F8FAFC] min-h-screen py-6 md:py-10">
+      <div className="max-w-7xl min-[1440px]:max-w-[1380px] mx-auto px-4 sm:px-6">
         {/* Editorial Masthead */}
-        <header className="mb-6 md:mb-8">
+        <header className="mb-6 md:mb-7">
           <nav
-            aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-3 overflow-x-auto whitespace-nowrap scrollbar-hide">
+            aria-label="Breadcrumb"
+            className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-3 overflow-x-auto whitespace-nowrap scrollbar-hide"
+          >
             <NavLink to="/" className="hover:text-[#083D91] transition-colors shrink-0">
               {t('nav.home')}
             </NavLink>
             <span aria-hidden="true" className="text-slate-300">/</span>
             <NavLink
-              to="/news" className={cn(
+              to="/news"
+              className={cn(
                 'transition-colors shrink-0',
-                !activeCategoryObj && activeLanguage === 'All'? 'text-[#102B4E] font-bold': 'hover:text-[#083D91]')}
+                !activeCategoryObj && activeLanguage === 'All'
+                  ? 'text-[#102B4E] font-bold'
+                  : 'hover:text-[#083D91]'
+              )}
             >
               {t('nav.news')}
             </NavLink>
             {activeCategoryObj && (
               <>
                 <span aria-hidden="true" className="text-slate-300">/</span>
-                <span className="text-[#102B4E] font-bold truncate">{activeCategoryObj.label}</span>
+                <span className="text-[#102B4E] font-bold truncate">
+                  {activeCategoryObj.label}
+                </span>
               </>
             )}
-            {!activeCategoryObj && activeLanguage !== 'All'&& (
+            {!activeCategoryObj && activeLanguage !== 'All' && (
               <>
                 <span aria-hidden="true" className="text-slate-300">/</span>
                 <span className="text-[#102B4E] font-bold truncate">{activeLanguage}</span>
@@ -248,7 +318,7 @@ export function NewsListingPage() {
             )}
           </nav>
 
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-slate-200/80">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-5 border-b border-slate-200/80">
             <div className="flex items-center gap-4 max-w-3xl min-w-0">
               {(activeDbCategory?.thumbnailUrl || activeDbCategory?.imageUrl) && (
                 <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-slate-200 bg-white shrink-0 shadow-xs">
@@ -261,10 +331,10 @@ export function NewsListingPage() {
                 </div>
               )}
               <div className="min-w-0">
-                <h1 className="text-[28px] sm:text-4xl md:text-[42px] font-bold text-[#102B4E] leading-[1.15] text-balance">
+                <h1 className="text-[28px] sm:text-4xl md:text-[40px] font-bold text-[#102B4E] leading-[1.15] text-balance">
                   {pageHeading}
                 </h1>
-                <p className="text-sm sm:text-base text-slate-600 mt-2 leading-relaxed">
+                <p className="text-sm sm:text-base text-slate-600 mt-1.5 leading-relaxed">
                   {t('news.subtitle')}
                 </p>
               </div>
@@ -280,22 +350,30 @@ export function NewsListingPage() {
 
         {/* Search, Language & Sort Toolbar */}
         <section
-          aria-label="Filter and search news" className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 mb-5 shadow-xs space-y-3">
+          aria-label="Filter and search news"
+          className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 mb-6 shadow-xs space-y-3"
+        >
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
             {/* Search Input */}
             <div className="relative flex-1 min-w-0">
               <Search
                 size={17}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
               <input
-                type="search" value={searchTerm}
+                type="search"
+                value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={t('news.searchPlaceholder')}
-                className="w-full min-h-[44px] pl-10 pr-10 py-2 bg-[#F8FAFC] border border-slate-200 rounded-xl text-sm text-[#102B4E] placeholder:text-slate-400 focus:outline-none focus:border-[#14B8A6] focus:bg-white transition-colors"/>
+                className="w-full min-h-[44px] pl-10 pr-10 py-2 bg-[#F8FAFC] border border-slate-200 rounded-xl text-sm text-[#102B4E] placeholder:text-slate-400 focus:outline-none focus:border-[#14B8A6] focus:bg-white transition-colors"
+              />
               {searchTerm && (
                 <button
-                  type="button" onClick={() => setSearchTerm('')}
-                  aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg">
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
                   <X size={16} />
                 </button>
               )}
@@ -304,19 +382,25 @@ export function NewsListingPage() {
             <div className="flex flex-wrap sm:flex-nowrap items-center justify-between lg:justify-end gap-2.5">
               {/* Language Segmented Switcher */}
               <div
-                role="group" aria-label="Filter by article language" className="inline-flex items-center p-1 bg-[#F1F5F9] rounded-xl border border-slate-200/60">
+                role="group"
+                aria-label="Filter by article language"
+                className="inline-flex items-center p-1 bg-[#F1F5F9] rounded-xl border border-slate-200/60"
+              >
                 {(['All', 'Kinyarwanda', 'English'] as const).map((langOpt) => {
                   const isActive = activeLanguage === langOpt;
                   return (
                     <button
                       key={langOpt}
-                      type="button" onClick={() => handleLanguageSelect(langOpt)}
+                      type="button"
+                      onClick={() => handleLanguageSelect(langOpt)}
                       className={cn(
                         'min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer',
                         isActive
-                          ? 'bg-[#083D91] text-white shadow-xs': 'text-slate-600 hover:text-[#102B4E]')}
+                          ? 'bg-[#083D91] text-white shadow-xs'
+                          : 'text-slate-600 hover:text-[#102B4E]'
+                      )}
                     >
-                      {langOpt === 'All'? t('search.allLanguages') : langOpt}
+                      {langOpt === 'All' ? t('search.allLanguages') : langOpt}
                     </button>
                   );
                 })}
@@ -324,9 +408,11 @@ export function NewsListingPage() {
 
               {/* Sort Select */}
               <select
-                aria-label="Sort articles" value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'newest'| 'most_read')}
-                className="min-h-[44px] px-3.5 py-2 bg-[#F8FAFC] border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-[#102B4E] focus:outline-none focus:border-[#14B8A6] cursor-pointer shrink-0">
+                aria-label="Sort articles"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'newest' | 'most_read')}
+                className="min-h-[44px] px-3.5 py-2 bg-[#F8FAFC] border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-[#102B4E] focus:outline-none focus:border-[#14B8A6] cursor-pointer shrink-0"
+              >
                 <option value="newest">{t('news.sortNewest')}</option>
                 <option value="most_read">{t('news.sortMostRead')}</option>
               </select>
@@ -336,18 +422,20 @@ export function NewsListingPage() {
           {/* Horizontal Category Filter Bar */}
           <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-0.5 scrollbar-hide">
             <NavLink
-              to={activeLanguage !== 'All'? `/news?lang=${activeLanguage}` : '/news'}
+              to={activeLanguage !== 'All' ? `/news?lang=${activeLanguage}` : '/news'}
               className={cn(
                 'min-h-[38px] inline-flex items-center px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0',
                 !activeCategoryObj
-                  ? 'bg-[#102B4E] text-white': 'bg-[#F1F5F9] text-slate-600 hover:text-[#083D91] hover:bg-slate-200/70')}
+                  ? 'bg-[#102B4E] text-white'
+                  : 'bg-[#F1F5F9] text-slate-600 hover:text-[#083D91] hover:bg-slate-200/70'
+              )}
             >
               {t('news.allNews')}
             </NavLink>
             {categoryFilters.map((cat) => {
               const isSelected = activeCategoryObj?.slug === cat.slug;
               const targetPath =
-                activeLanguage !== 'All'? `${cat.path}?lang=${activeLanguage}` : cat.path;
+                activeLanguage !== 'All' ? `${cat.path}?lang=${activeLanguage}` : cat.path;
               return (
                 <NavLink
                   key={cat.slug}
@@ -355,7 +443,9 @@ export function NewsListingPage() {
                   className={cn(
                     'min-h-[38px] inline-flex items-center px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0',
                     isSelected
-                      ? 'bg-[#102B4E] text-white': 'bg-[#F1F5F9] text-slate-600 hover:text-[#083D91] hover:bg-slate-200/70')}
+                      ? 'bg-[#102B4E] text-white'
+                      : 'bg-[#F1F5F9] text-slate-600 hover:text-[#083D91] hover:bg-slate-200/70'
+                  )}
                 >
                   {cat.label}
                 </NavLink>
@@ -364,32 +454,23 @@ export function NewsListingPage() {
           </div>
         </section>
 
-        {/* Loading State */}
+        {/* Loading Skeleton Grid (matches responsive 1/2/3/4/5 column layout) */}
         {loading ? (
-          <div className="space-y-8">
-            <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12 animate-pulse">
-              <div className="lg:col-span-7 aspect-[16/10] bg-slate-200"/>
-              <div className="lg:col-span-5 p-6 sm:p-8 space-y-4">
-                <div className="h-4 w-32 bg-slate-200 rounded"/>
-                <div className="h-8 w-full bg-slate-200 rounded"/>
-                <div className="h-8 w-3/4 bg-slate-200 rounded"/>
-                <div className="h-20 w-full bg-slate-100 rounded"/>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 6 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden animate-pulse">
-                  <div className="aspect-[16/10] bg-slate-200"/>
-                  <div className="p-5 space-y-3">
-                    <div className="h-3 w-28 bg-slate-200 rounded"/>
-                    <div className="h-6 w-full bg-slate-200 rounded"/>
-                    <div className="h-14 w-full bg-slate-100 rounded"/>
-                  </div>
+          <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 min-[1440px]:grid-cols-5 gap-4 sm:gap-5">
+            {Array.from({ length: 10 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="bg-white rounded-xl border border-slate-200/80 overflow-hidden animate-pulse flex flex-col"
+              >
+                <div className="aspect-[16/10] bg-slate-200" />
+                <div className="p-4 space-y-2.5 flex-1 flex flex-col">
+                  <div className="h-3 w-20 bg-slate-200 rounded" />
+                  <div className="h-5 w-full bg-slate-200 rounded" />
+                  <div className="h-5 w-3/4 bg-slate-100 rounded" />
+                  <div className="h-3 w-24 bg-slate-100 rounded mt-auto pt-3" />
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         ) : filteredNews.length === 0 ? (
           /* Honest Empty State */
@@ -402,178 +483,147 @@ export function NewsListingPage() {
             </h2>
             {allNews.length > 0 && (
               <button
-                type="button" onClick={resetAllFilters}
-                className="mt-4 inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-[#083D91] hover:bg-[#07366D] text-white text-sm font-bold transition-colors cursor-pointer">
+                type="button"
+                onClick={resetAllFilters}
+                className="mt-4 inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-[#083D91] hover:bg-[#07366D] text-white text-sm font-bold transition-colors cursor-pointer"
+              >
                 {t('news.resetFilters')}
               </button>
             )}
           </div>
         ) : (
           <div className="space-y-8">
-            {/* Lead Story Feature */}
-            {leadStory && (
-              <article className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-md transition-all grid grid-cols-1 lg:grid-cols-12 items-stretch group">
-                <NavLink
-                  to={`/news/${leadStory.slug}`}
-                  className="lg:col-span-7 relative aspect-[16/10] lg:aspect-auto lg:min-h-[360px] bg-slate-100 overflow-hidden block">
-                  <img
-                    src={resolveAssetUrl(leadStory.imageUrl, STATIC_ASSETS.rwandaNewsKagame)}
-                    alt={leadStory.headline}
-                    referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500" onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = STATIC_ASSETS.rwandaNewsKagame;
-                    }}
-                  />
-                </NavLink>
-                <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 text-xs font-bold text-[#14B8A6] mb-3">
-                      <span>{t('news.leadStory')}</span>
-                      <span aria-hidden="true" className="text-slate-300">·</span>
-                      <span>{leadStory.category}</span>
-                      <span aria-hidden="true" className="text-slate-300">·</span>
-                      <span className="text-slate-500 font-semibold">{leadStory.language}</span>
-                    </div>
+            {/* Responsive News Card Grid: 1 (<480px), 2 (480px+), 3 (768px+), 4 (1024px+), 5 (1440px+) */}
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 min-[1440px]:grid-cols-5 gap-4 sm:gap-5">
+              {pageItems.map((item) => {
+                const detailPath = `/news/${item.slug}`;
+                const relativeTime = formatRelativeTime(item.publishedAt, nowMs, language);
+                const exactTime = safeFormatDate(item.publishedAt, 'MMM dd, yyyy HH:mm', '');
 
-                    <h2 className="text-2xl sm:text-[28px] font-bold text-[#102B4E] leading-[1.2] text-balance group-hover:text-[#083D91] transition-colors">
-                      <NavLink to={`/news/${leadStory.slug}`}>{leadStory.headline}</NavLink>
-                    </h2>
-
-                    <p className="text-sm sm:text-base text-slate-600 mt-3.5 leading-relaxed line-clamp-4">
-                      {leadStory.summary}
-                    </p>
-                  </div>
-
-                  <div className="pt-6 mt-6 border-t border-slate-100 flex flex-col gap-4">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500 font-medium tabular-nums">
-                      <span className="font-semibold text-[#102B4E]">{leadStory.author}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar size={12} className="text-[#14B8A6]"/>
-                        {safeFormatDate(leadStory.publishedAt, 'MMM dd, yyyy')}
-                      </span>
-                      <span aria-hidden="true">·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock size={12} className="text-[#14B8A6]"/>
-                        {calculateReadingTime(leadStory.content)} {t('card.minRead')}
-                      </span>
-                    </div>
-
-                    <NavLink
-                      to={`/news/${leadStory.slug}`}
-                      className="min-h-[44px] w-full sm:w-fit inline-flex items-center justify-center gap-2 bg-[#083D91] hover:bg-[#07366D] text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-colors">
-                      <span>{t('card.readFull')}</span>
-                      <ArrowRight size={16} />
-                    </NavLink>
-                  </div>
-                </div>
-              </article>
-            )}
-
-            {/* Editorial Story Grid */}
-            {gridStories.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {gridStories.map((item) => (
+                return (
                   <article
                     key={item.id}
-                    className="bg-white rounded-2xl overflow-hidden border border-slate-200/80 hover:border-[#14B8A6] hover:shadow-md transition-all flex flex-col group">
+                    className="bg-white rounded-xl border border-slate-200/80 overflow-hidden flex flex-col h-full transition-all duration-200 hover:border-[#083D91]/35 hover:shadow-md lg:hover:-translate-y-0.5 group"
+                  >
                     <NavLink
-                      to={`/news/${item.slug}`}
-                      className="aspect-[16/10] bg-slate-100 overflow-hidden block shrink-0">
+                      to={detailPath}
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      className="aspect-[16/10] bg-slate-100 overflow-hidden block shrink-0"
+                    >
                       <img
                         src={resolveAssetUrl(item.imageUrl, STATIC_ASSETS.rwandaNewsKagame)}
                         alt={item.headline}
-                        loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500" onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = STATIC_ASSETS.rwandaNewsKagame;
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src =
+                            STATIC_ASSETS.rwandaNewsKagame;
                         }}
                       />
                     </NavLink>
 
-                    <div className="p-5 sm:p-6 flex flex-col flex-1 justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 text-xs font-bold text-[#14B8A6] mb-2">
-                          <span>{item.category}</span>
-                          <span aria-hidden="true" className="text-slate-300">·</span>
-                          <span className="text-slate-500 font-semibold">{item.language}</span>
-                        </div>
+                    <div className="p-4 flex flex-col flex-1 min-w-0">
+                      {/* 1. News Category (unboxed, clean typography) */}
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-[#14B8A6] mb-1.5 truncate">
+                        {item.category || 'News'}
+                      </span>
 
-                        <h2 className="text-lg sm:text-[19px] font-bold text-[#102B4E] leading-snug line-clamp-2 group-hover:text-[#083D91] transition-colors">
-                          <NavLink to={`/news/${item.slug}`}>{item.headline}</NavLink>
-                        </h2>
-
-                        <p className="text-sm text-slate-600 mt-2.5 line-clamp-3 leading-relaxed">
-                          {item.summary}
-                        </p>
-                      </div>
-
-                      <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500 tabular-nums">
-                        <div className="flex items-center gap-2 min-w-0 truncate">
-                          <span className="inline-flex items-center gap-1 shrink-0">
-                            <Calendar size={12} className="text-[#14B8A6]"/>
-                            {safeFormatDate(item.publishedAt, 'MMM dd, yyyy')}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span className="truncate">
-                            {calculateReadingTime(item.content)} {t('card.minRead')}
-                          </span>
-                        </div>
-
+                      {/* 2. Clickable News Title wrapping cleanly */}
+                      <h2 className="text-[15px] sm:text-base font-bold text-[#102B4E] leading-snug break-words">
                         <NavLink
-                          to={`/news/${item.slug}`}
-                          className="inline-flex items-center gap-1 text-[#083D91] group-hover:text-[#14B8A6] font-bold shrink-0 py-1">
-                          <span>{t('cat.news.cta')}</span>
-                          <ArrowRight size={14} />
+                          to={detailPath}
+                          className="block text-[#102B4E] hover:text-[#083D91] focus-visible:outline-none focus-visible:underline transition-colors"
+                        >
+                          {item.headline}
                         </NavLink>
+                      </h2>
+
+                      {/* 3. Relative Published Time */}
+                      <div className="mt-auto pt-3 flex items-center gap-1.5 text-xs font-medium text-slate-500 tabular-nums">
+                        <Clock
+                          size={12}
+                          className="text-[#14B8A6] shrink-0"
+                          aria-hidden="true"
+                        />
+                        <time dateTime={item.publishedAt} title={exactTime}>
+                          {relativeTime}
+                        </time>
                       </div>
                     </div>
                   </article>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <nav
-                aria-label="News pagination" className="flex items-center justify-center gap-2 pt-4">
-                <button
-                  type="button" disabled={currentPage === 1}
-                  onClick={() => {
-                    setPage((p) => Math.max(1, p - 1));
-                    window.scrollTo({ top: 0, behavior: 'smooth'});
-                  }}
-                  className="min-h-[44px] min-w-[44px] px-3 rounded-xl border border-slate-200 bg-white text-[#102B4E] font-bold text-sm inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#14B8A6] cursor-pointer" aria-label="Previous page">
-                  <ChevronLeft size={18} />
-                </button>
+            {/* Footer Status + Pagination Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200/80">
+              <p className="text-xs sm:text-sm font-medium text-slate-500 tabular-nums">
+                Showing <span className="font-bold text-[#102B4E]">{rangeStart}–{rangeEnd}</span>{' '}
+                of <span className="font-bold text-[#102B4E]">{filteredNews.length}</span>{' '}
+                <span aria-hidden="true" className="mx-1 text-slate-300">·</span>
+                Page <span className="font-bold text-[#102B4E]">{currentPage}</span> of{' '}
+                <span className="font-bold text-[#102B4E]">{totalPages}</span>
+              </p>
 
-                {Array.from({ length: totalPages }).map((_, idx) => {
-                  const pNum = idx + 1;
-                  return (
-                    <button
-                      key={pNum}
-                      type="button" onClick={() => {
-                        setPage(pNum);
-                        window.scrollTo({ top: 0, behavior: 'smooth'});
-                      }}
-                      className={cn(
-                        'min-h-[44px] min-w-[44px] px-3.5 rounded-xl font-bold text-sm tabular-nums transition-colors cursor-pointer',
-                        pNum === currentPage
-                          ? 'bg-[#083D91] text-white': 'bg-white border border-slate-200 text-slate-600 hover:border-[#14B8A6] hover:text-[#083D91]')}
-                    >
-                      {pNum}
-                    </button>
-                  );
-                })}
+              {totalPages > 1 && (
+                <nav
+                  aria-label="News pagination"
+                  className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2"
+                >
+                  <button
+                    type="button"
+                    disabled={currentPage === 1}
+                    onClick={() => goToPage(currentPage - 1)}
+                    aria-label="Previous page"
+                    className="min-h-[44px] px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-[#102B4E] font-bold text-xs sm:text-sm inline-flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#14B8A6] hover:text-[#083D91] transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={16} />
+                    <span>Previous</span>
+                  </button>
 
-                <button
-                  type="button" disabled={currentPage === totalPages}
-                  onClick={() => {
-                    setPage((p) => Math.min(totalPages, p + 1));
-                    window.scrollTo({ top: 0, behavior: 'smooth'});
-                  }}
-                  className="min-h-[44px] min-w-[44px] px-3 rounded-xl border border-slate-200 bg-white text-[#102B4E] font-bold text-sm inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#14B8A6] cursor-pointer" aria-label="Next page">
-                  <ChevronRight size={18} />
-                </button>
-              </nav>
-            )}
+                  {paginationRange.map((entry, idx) =>
+                    entry === 'ellipsis' ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        aria-hidden="true"
+                        className="min-h-[44px] min-w-[32px] inline-flex items-center justify-center text-sm font-bold text-slate-400 select-none"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={entry}
+                        type="button"
+                        onClick={() => goToPage(entry)}
+                        aria-current={entry === currentPage ? 'page' : undefined}
+                        aria-label={`Page ${entry}`}
+                        className={cn(
+                          'min-h-[44px] min-w-[42px] px-3 rounded-xl font-bold text-xs sm:text-sm tabular-nums transition-colors cursor-pointer',
+                          entry === currentPage
+                            ? 'bg-[#083D91] text-white shadow-xs'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:border-[#14B8A6] hover:text-[#083D91]'
+                        )}
+                      >
+                        {entry}
+                      </button>
+                    )
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={currentPage === totalPages}
+                    onClick={() => goToPage(currentPage + 1)}
+                    aria-label="Next page"
+                    className="min-h-[44px] px-3 sm:px-4 rounded-xl border border-slate-200 bg-white text-[#102B4E] font-bold text-xs sm:text-sm inline-flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#14B8A6] hover:text-[#083D91] transition-colors cursor-pointer"
+                  >
+                    <span>Next</span>
+                    <ChevronRight size={16} />
+                  </button>
+                </nav>
+              )}
+            </div>
           </div>
         )}
       </div>
