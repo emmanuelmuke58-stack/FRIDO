@@ -125,8 +125,14 @@ export function MediaManagement() {
                <p className="text-sm font-bold text-slate-900 truncate mb-1">{item.name}</p>
                <div className="flex justify-between items-center">
                   <span className="text-[10px] text-slate-400">{format(new Date(item.createdAt), 'MMM dd, yyyy')}</span>
-                  <button 
-                    onClick={() => { if(window.confirm('Delete media?')){ deleteDoc(doc(db, 'media', item.id)); fetchMedia(); } }}
+                  <button
+                    onClick={async () => {
+                      if (window.confirm('Delete media?')) {
+                        await deleteDoc(doc(db, 'media', item.id));
+                        await logActivity('settings', 'delete', `Deleted media: ${item.name}`, item.id);
+                        fetchMedia();
+                      }
+                    }}
                     className="text-slate-300 hover:text-red-500 transition-colors"
                   >
                     <Trash2 size={16} />

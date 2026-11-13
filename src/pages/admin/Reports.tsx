@@ -215,7 +215,7 @@ export function ReportsPage() {
               </div>
             ))}
           </div>
-          <button className="w-full mt-8 py-4 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+          <button onClick={() => window.print()} className="w-full mt-8 py-4 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
             <Printer size={18} /> Print Full Report
           </button>
         </div>

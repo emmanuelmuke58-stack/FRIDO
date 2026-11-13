@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db, auth } from './firebase';
 
 export interface WebsiteSettings {
   websiteName: string;
@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS: WebsiteSettings = {
     youtube: "https://youtube.com"
   },
   seo: {
-    defaultTitle: "Rwanda Opportunities - Find Your Next Big Step",
+    defaultTitle: "Rwanda Opportunities - More Opportunities. A Stronger Rwanda.",
     defaultDescription: "Your trusted source for the latest news and opportunities in Rwanda and beyond."
   },
   heroSlides: [
@@ -81,15 +81,34 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'global'), (snap) => {
-      if (snap.exists()) {
-        setSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as WebsiteSettings);
-      } else {
-        // Initialize settings if they don't exist
-        setDoc(doc(db, 'settings', 'global'), DEFAULT_SETTINGS);
+    const unsub = onSnapshot(
+      doc(db, 'settings', 'global'),
+      (snap) => {
+        if (snap.exists()) {
+          const merged = { ...DEFAULT_SETTINGS, ...snap.data() } as WebsiteSettings;
+          setSettings(merged);
+          if (merged.seo?.defaultTitle) {
+            document.title = merged.seo.defaultTitle;
+          }
+          if (merged.faviconUrl) {
+            let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+            if (!link) {
+              link = document.createElement('link');
+              link.rel = 'icon';
+              document.head.appendChild(link);
+            }
+            link.href = merged.faviconUrl;
+          }
+        } else if (auth.currentUser) {
+          setDoc(doc(db, 'settings', 'global'), DEFAULT_SETTINGS).catch(() => {});
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Settings snapshot error:', error);
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    );
     return unsub;
   }, []);
 

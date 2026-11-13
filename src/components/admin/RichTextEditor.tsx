@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
+import { Image as ImageIcon } from 'lucide-react';
+import { MediaPickerModal } from './MediaPickerModal';
 
 interface RichTextEditorProps {
   value: string;
@@ -28,9 +30,35 @@ const formats = [
 ];
 
 export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorProps) {
+  const quillRef = useRef<any>(null);
+  const [isMediaOpen, setMediaOpen] = useState(false);
+
+  const handleInsertMedia = (url: string) => {
+    const editor = quillRef.current?.getEditor?.();
+    if (editor) {
+      const range = editor.getSelection(true);
+      const index = range ? range.index : editor.getLength();
+      editor.insertEmbed(index, 'image', url, 'user');
+      editor.setSelection(index + 1);
+    } else {
+      onChange(`${value || ''}<p><img src="${url}" alt="Article media" /></p>`);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl overflow-hidden border border-slate-200 focus-within:border-teal-500 transition-all">
-      <ReactQuill 
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rich Content Editor</span>
+        <button
+          type="button"
+          onClick={() => setMediaOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 hover:border-teal-500 hover:text-teal-600 rounded-lg text-xs font-bold text-slate-600 transition-all shadow-sm"
+        >
+          <ImageIcon size={14} /> Insert from Media Library
+        </button>
+      </div>
+      <ReactQuill
+        ref={quillRef}
         theme="snow"
         value={value}
         onChange={onChange}
@@ -38,6 +66,11 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         formats={formats}
         placeholder={placeholder}
         className="min-h-[400px]"
+      />
+      <MediaPickerModal
+        isOpen={isMediaOpen}
+        onClose={() => setMediaOpen(false)}
+        onSelect={handleInsertMedia}
       />
     </div>
   );

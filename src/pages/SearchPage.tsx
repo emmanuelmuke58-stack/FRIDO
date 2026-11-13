@@ -152,7 +152,9 @@ export function SearchPage() {
             <AnimatePresence mode="popLayout">
               {filteredResults.map((item, idx) => {
                 const Icon = ICON_MAP[item.type === 'news' ? 'news' : item.data.category] || Star;
-                const path = item.type === 'news' ? `/news/${item.data.slug}` : `/${item.data.category.toLowerCase()}/${item.data.slug}`;
+                const path = item.type === 'news'
+                  ? `/news/${item.data.slug}`
+                  : `/${item.data.category === 'Others' ? 'opportunities' : item.data.category.toLowerCase()}/${item.data.slug}`;
                 
                 return (
                   <motion.div

@@ -1,14 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSettings, WebsiteSettings } from '../../lib/SettingsContext';
-import { Save, Globe, Phone, Mail, MapPin, Layout, Share2, Plus, Trash, Image as ImageIcon, ChevronRight } from 'lucide-react';
+import { Save, Globe, Phone, Mail, MapPin, Layout, Share2, Plus, Trash, Image as ImageIcon } from 'lucide-react';
 import { logActivity } from '../../lib/services';
 import { cn } from '../../lib/utils';
+import { MediaPickerModal } from '../../components/admin/MediaPickerModal';
 
 export function SettingsManagement() {
   const { settings, updateSettings } = useSettings();
   const [formData, setFormData] = useState<WebsiteSettings>(settings);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'hero' | 'social' | 'seo'>('general');
+  const [mediaTarget, setMediaTarget] = useState<{ type: 'logo' | 'favicon' | 'slide'; slideIdx?: number } | null>(null);
+
+  useEffect(() => {
+    setFormData(settings);
+  }, [settings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -47,6 +53,18 @@ export function SettingsManagement() {
     setFormData({ ...formData, heroSlides: newSlides });
   };
 
+  const handleMediaSelect = (url: string) => {
+    if (!mediaTarget) return;
+    if (mediaTarget.type === 'logo') {
+      setFormData({ ...formData, logoUrl: url });
+    } else if (mediaTarget.type === 'favicon') {
+      setFormData({ ...formData, faviconUrl: url });
+    } else if (mediaTarget.type === 'slide' && typeof mediaTarget.slideIdx === 'number') {
+      updateSlide(mediaTarget.slideIdx, 'image', url);
+    }
+    setMediaTarget(null);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -54,7 +72,7 @@ export function SettingsManagement() {
           <h1 className="text-3xl font-extrabold text-[#102B4E] font-montserrat">Website Settings</h1>
           <p className="text-slate-500 mt-1">Configure global appearance, hero slides and contact info.</p>
         </div>
-        <button 
+        <button
           onClick={handleSave}
           disabled={saving}
           className="bg-teal-500 hover:bg-teal-600 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all disabled:opacity-50"
@@ -95,27 +113,45 @@ export function SettingsManagement() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Website Name</label>
-                  <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.websiteName} onChange={e => setFormData({...formData, websiteName: e.target.value})} />
+                  <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.websiteName} onChange={e => setFormData({ ...formData, websiteName: e.target.value })} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact Email</label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.contactEmail} onChange={e => setFormData({...formData, contactEmail: e.target.value})} />
+                    <input className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.contactEmail} onChange={e => setFormData({ ...formData, contactEmail: e.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact Phone</label>
                   <div className="relative">
                     <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.contactPhone} onChange={e => setFormData({...formData, contactPhone: e.target.value})} />
+                    <input className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.contactPhone} onChange={e => setFormData({ ...formData, contactPhone: e.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Office Address</label>
                   <div className="relative">
                     <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                    <input className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Logo URL</label>
+                  <div className="flex gap-2">
+                    <input className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-mono" value={formData.logoUrl} onChange={e => setFormData({ ...formData, logoUrl: e.target.value })} />
+                    <button type="button" onClick={() => setMediaTarget({ type: 'logo' })} className="px-4 bg-slate-100 hover:bg-slate-200 rounded-2xl text-xs font-bold text-slate-700">
+                      Pick
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Favicon URL</label>
+                  <div className="flex gap-2">
+                    <input className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-mono" value={formData.faviconUrl || ''} onChange={e => setFormData({ ...formData, faviconUrl: e.target.value })} placeholder="https://..." />
+                    <button type="button" onClick={() => setMediaTarget({ type: 'favicon' })} className="px-4 bg-slate-100 hover:bg-slate-200 rounded-2xl text-xs font-bold text-slate-700">
+                      Pick
+                    </button>
                   </div>
                 </div>
               </div>
@@ -140,37 +176,42 @@ export function SettingsManagement() {
                       </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                       <div className="space-y-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Category Kicker</label>
-                            <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold text-teal-600" value={slide.category} onChange={e => updateSlide(idx, 'category', e.target.value)} />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Slide Title</label>
-                            <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold" value={slide.title} onChange={e => updateSlide(idx, 'title', e.target.value)} />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Slide Description</label>
-                            <textarea className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm h-24 resize-none" value={slide.description} onChange={e => updateSlide(idx, 'description', e.target.value)} />
-                          </div>
-                       </div>
-                       <div className="space-y-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image URL</label>
-                            <div className="relative">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Category Kicker</label>
+                          <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold text-teal-600" value={slide.category} onChange={e => updateSlide(idx, 'category', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Slide Title</label>
+                          <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold" value={slide.title} onChange={e => updateSlide(idx, 'title', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Slide Description</label>
+                          <textarea className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm h-24 resize-none" value={slide.description} onChange={e => updateSlide(idx, 'description', e.target.value)} />
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image URL</label>
+                          <div className="flex gap-2">
+                            <div className="relative flex-1">
                               <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                               <input className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-mono" value={slide.image} onChange={e => updateSlide(idx, 'image', e.target.value)} />
                             </div>
+                            <button type="button" onClick={() => setMediaTarget({ type: 'slide', slideIdx: idx })} className="px-4 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                              Pick
+                            </button>
                           </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Button Text</label>
-                            <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" value={slide.buttonText} onChange={e => updateSlide(idx, 'buttonText', e.target.value)} />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Destination Link</label>
-                            <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-mono" value={slide.link} onChange={e => updateSlide(idx, 'link', e.target.value)} placeholder="/news or /jobs/slug" />
-                          </div>
-                       </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Button Text</label>
+                          <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" value={slide.buttonText} onChange={e => updateSlide(idx, 'buttonText', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Destination Link</label>
+                          <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-mono" value={slide.link} onChange={e => updateSlide(idx, 'link', e.target.value)} placeholder="/news or /jobs/slug" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -184,19 +225,19 @@ export function SettingsManagement() {
                 <Share2 size={24} className="text-teal-500" /> Social Presence
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {Object.keys(formData.socialLinks).map(key => (
-                   <div key={key} className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest capitalize">{key} URL</label>
-                      <input 
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-mono" 
-                        value={(formData.socialLinks as any)[key]} 
-                        onChange={e => setFormData({
-                          ...formData, 
-                          socialLinks: { ...formData.socialLinks, [key]: e.target.value }
-                        })} 
-                      />
-                   </div>
-                 ))}
+                {Object.keys(formData.socialLinks).map(key => (
+                  <div key={key} className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest capitalize">{key} URL</label>
+                    <input
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-mono"
+                      value={(formData.socialLinks as any)[key]}
+                      onChange={e => setFormData({
+                        ...formData,
+                        socialLinks: { ...formData.socialLinks, [key]: e.target.value }
+                      })}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -209,17 +250,23 @@ export function SettingsManagement() {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Default Meta Title</label>
-                  <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold" value={formData.seo.defaultTitle} onChange={e => setFormData({...formData, seo: {...formData.seo, defaultTitle: e.target.value}})} />
+                  <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold" value={formData.seo.defaultTitle} onChange={e => setFormData({ ...formData, seo: { ...formData.seo, defaultTitle: e.target.value } })} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Default Meta Description</label>
-                  <textarea className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm h-32 resize-none" value={formData.seo.defaultDescription} onChange={e => setFormData({...formData, seo: {...formData.seo, defaultDescription: e.target.value}})} />
+                  <textarea className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm h-32 resize-none" value={formData.seo.defaultDescription} onChange={e => setFormData({ ...formData, seo: { ...formData.seo, defaultDescription: e.target.value } })} />
                 </div>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      <MediaPickerModal
+        isOpen={Boolean(mediaTarget)}
+        onClose={() => setMediaTarget(null)}
+        onSelect={handleMediaSelect}
+      />
     </div>
   );
 }

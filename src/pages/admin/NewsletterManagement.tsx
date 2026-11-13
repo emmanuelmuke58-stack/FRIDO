@@ -120,8 +120,14 @@ export function NewsletterManagement() {
                     >
                       {sub.status === 'active' ? <XCircle size={18} /> : <CheckCircle2 size={18} />}
                     </button>
-                    <button 
-                      onClick={() => { if(window.confirm('Remove from list?')){ deleteDoc(doc(db, 'subscribers', sub.id)); fetchSubscribers(); } }}
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Remove from list?')) {
+                          await deleteDoc(doc(db, 'subscribers', sub.id));
+                          await logActivity('settings', 'delete', `Removed subscriber: ${sub.email}`, sub.id);
+                          fetchSubscribers();
+                        }
+                      }}
                       className="p-2 text-slate-300 hover:text-red-500 transition-all"
                     >
                       <Trash2 size={18} />

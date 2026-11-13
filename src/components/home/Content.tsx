@@ -105,7 +105,7 @@ export function MainContent() {
             return (
               <MotionNavLink
                 key={opp.id}
-                to={`/${opp.category.toLowerCase()}/${opp.slug}`}
+                to={`/${opp.category === 'Others' ? 'opportunities' : opp.category.toLowerCase()}/${opp.slug}`}
                 initial={{ x: 20, opacity: 0 }}
                 whileInView={{ x: 0, opacity: 1 }}
                 viewport={{ once: true }}

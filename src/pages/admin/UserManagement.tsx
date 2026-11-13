@@ -114,8 +114,14 @@ export function UserManagement() {
                     >
                       {user.status === 'active' ? <ShieldAlert size={18} /> : <CheckCircle2 size={18} />}
                     </button>
-                    <button 
-                      onClick={() => { if(window.confirm('Delete user record?')){ deleteDoc(doc(db, 'users', user.id)); fetchUsers(); } }}
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Delete user record?')) {
+                          await deleteDoc(doc(db, 'users', user.id));
+                          await logActivity('users', 'delete', `Deleted user: ${user.email}`, user.id);
+                          fetchUsers();
+                        }
+                      }}
                       className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                     >
                       <Trash2 size={18} />

@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { Opportunity } from '@/src/types';
 import { MapPin, Clock, ArrowRight, Briefcase, GraduationCap, ClipboardList, Star } from 'lucide-react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { cn } from '@/src/lib/utils';
 
@@ -16,25 +16,55 @@ const ICON_MAP: Record<string, any> = {
   Others: Star,
 };
 
+const SUBCATEGORY_FILTERS: Record<string, { label: string; slug: string }[]> = {
+  Jobs: [
+    { label: 'All Jobs', slug: '' },
+    { label: 'Government', slug: 'government' },
+    { label: 'Private Sector', slug: 'private-sector' },
+    { label: 'NGO', slug: 'ngo' },
+    { label: 'International', slug: 'international' },
+  ],
+  Scholarships: [
+    { label: 'All Scholarships', slug: '' },
+    { label: 'Local', slug: 'local' },
+    { label: 'International', slug: 'international' },
+    { label: 'Undergraduate', slug: 'undergraduate' },
+    { label: "Master's", slug: 'masters' },
+    { label: 'PhD', slug: 'phd' },
+  ],
+  Tenders: [
+    { label: 'All Tenders', slug: '' },
+    { label: 'Government', slug: 'government' },
+    { label: 'Private Sector', slug: 'private-sector' },
+    { label: 'NGO', slug: 'ngo' },
+  ],
+  Opportunities: [
+    { label: 'All Opportunities', slug: '' },
+    { label: 'Internships', slug: 'internships' },
+    { label: 'Fellowships', slug: 'fellowships' },
+    { label: 'Grants', slug: 'grants' },
+    { label: 'Training', slug: 'training' },
+    { label: 'Conferences', slug: 'conferences' },
+    { label: 'Workshops', slug: 'workshops' },
+  ]
+};
+
 export function OpportunitiesListingPage() {
   const [opps, setOpps] = React.useState<Opportunity[]>([]);
   const [loading, setLoading] = React.useState(true);
   const location = useLocation();
-  
-  const pathSegments = location.pathname.split('/');
-  const lastSegment = pathSegments[pathSegments.length - 1];
-  
-  // Safe string manipulation for category
-  const categoryFromPath = React.useMemo(() => {
-    if (!lastSegment) return '';
-    return lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1);
-  }, [lastSegment]);
+  const { subCategory } = useParams();
+
+  const baseSegment = React.useMemo(() => {
+    const first = location.pathname.split('/').filter(Boolean)[0] || 'opportunities';
+    return first.charAt(0).toUpperCase() + first.slice(1);
+  }, [location.pathname]);
 
   const filterCategory = React.useMemo(() => {
     const validCategories = ['Jobs', 'Scholarships', 'Tenders', 'Opportunities'];
-    if (!validCategories.includes(categoryFromPath)) return null;
-    return categoryFromPath === 'Opportunities' ? null : categoryFromPath;
-  }, [categoryFromPath]);
+    if (!validCategories.includes(baseSegment)) return null;
+    return baseSegment === 'Opportunities' ? null : baseSegment;
+  }, [baseSegment]);
 
   React.useEffect(() => {
     const fetchOpps = async () => {
@@ -42,10 +72,26 @@ export function OpportunitiesListingPage() {
       try {
         let q = query(collection(db, 'opportunities'), where('status', '==', 'active'), orderBy('createdAt', 'desc'));
         if (filterCategory) {
-          q = query(collection(db, 'opportunities'), where('status', '==', 'active'), where('category', '==', filterCategory), orderBy('createdAt', 'desc'));
+          q = query(
+            collection(db, 'opportunities'),
+            where('status', '==', 'active'),
+            where('category', '==', filterCategory),
+            orderBy('createdAt', 'desc')
+          );
         }
         const snapshot = await getDocs(q);
-        setOpps(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity)));
+        let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Opportunity));
+
+        if (subCategory) {
+          const normalized = subCategory.toLowerCase().replace(/-/g, ' ');
+          items = items.filter(o =>
+            (o.subCategory || '').toLowerCase().replace(/['-]/g, ' ') === normalized ||
+            (o.subCategory || '').toLowerCase().replace(/['-\s]/g, '') === subCategory.toLowerCase().replace(/['-\s]/g, '') ||
+            (o.type || '').toLowerCase().includes(normalized)
+          );
+        }
+
+        setOpps(items);
       } catch (e) {
         console.error(e);
       } finally {
@@ -53,7 +99,10 @@ export function OpportunitiesListingPage() {
       }
     };
     fetchOpps();
-  }, [filterCategory]);
+  }, [filterCategory, subCategory]);
+
+  const subFilters = SUBCATEGORY_FILTERS[baseSegment] || SUBCATEGORY_FILTERS.Opportunities;
+  const basePath = `/${baseSegment.toLowerCase()}`;
 
   if (loading) {
     return (
@@ -67,11 +116,37 @@ export function OpportunitiesListingPage() {
   return (
     <div className="bg-slate-50 min-h-screen py-8 md:py-16">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="mb-10 md:mb-12">
+        <div className="mb-8 md:mb-10">
           <h1 className="text-3xl md:text-5xl font-extrabold text-[#102B4E] font-montserrat mb-3 md:mb-4">
-            {filterCategory || 'Latest Opportunities'}
+            {subCategory
+              ? `${subCategory.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} ${filterCategory || 'Opportunities'}`
+              : filterCategory || 'Latest Opportunities'}
           </h1>
-          <p className="text-sm md:text-lg text-slate-500 font-medium max-w-2xl">Find the best local and international opportunities curated for Rwanda.</p>
+          <p className="text-sm md:text-lg text-slate-500 font-medium max-w-2xl">
+            Find the best local and international opportunities curated for Rwanda.
+          </p>
+        </div>
+
+        {/* Sub-Category Filters */}
+        <div className="flex gap-2 overflow-x-auto pb-4 mb-8 scrollbar-hide">
+          {subFilters.map(f => {
+            const targetPath = f.slug ? `${basePath}/category/${f.slug}` : basePath;
+            const isActive = (!subCategory && !f.slug) || (subCategory?.toLowerCase() === f.slug);
+            return (
+              <NavLink
+                key={f.label}
+                to={targetPath}
+                className={cn(
+                  "whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all border",
+                  isActive
+                    ? "bg-[#083D91] text-white border-[#083D91] shadow-sm"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-teal-500 hover:text-teal-600"
+                )}
+              >
+                {f.label}
+              </NavLink>
+            );
+          })}
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:gap-6">
@@ -80,7 +155,7 @@ export function OpportunitiesListingPage() {
             return (
               <MotionNavLink
                 key={opp.id}
-                to={`/${opp.category.toLowerCase()}/${opp.slug}`}
+                to={`/${opp.category === 'Others' ? 'opportunities' : opp.category.toLowerCase()}/${opp.slug}`}
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: idx * 0.05 }}
@@ -115,7 +190,7 @@ export function OpportunitiesListingPage() {
                     opp.category === 'Scholarships' ? "bg-teal-100 text-teal-700" :
                     opp.category === 'Tenders' ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-700"
                   )}>
-                    {opp.category}
+                    {opp.subCategory || opp.category}
                   </span>
                   <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-teal-500 group-hover:text-white transition-all shadow-sm">
                     <ArrowRight size={18} />

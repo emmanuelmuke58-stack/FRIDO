@@ -1,34 +1,14 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
-    function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
-    function hasRole(role) {
-      return isVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
-    }
-    
-    function isAdmin() {
-      return isVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             (getUserData().role == 'admin' || getUserData().role == 'super_admin' || getUserData().role == 'editor');
-    }
-    
-    function isSuperAdmin() {
-      return hasRole('super_admin');
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
     }
 
+    // Global helper primitives
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
@@ -39,78 +19,262 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedSuperAdmin() {
+      return isVerified() && request.auth.token.email == 'emmanuelmuke58@gmail.com';
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return userExists() && getUserData().status == 'active';
+    }
+
+    function hasRole(role) {
+      return isVerified() && isActiveUser() && getUserData().role == role;
+    }
+
+    function isSuperAdmin() {
+      return isBootstrappedSuperAdmin() || hasRole('super_admin');
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isVerified() && isActiveUser() &&
+        getUserData().role in ['admin', 'editor', 'content_manager']
+      );
+    }
+
+    function isValidNews(data) {
+      return data.keys().hasAll(['headline', 'slug', 'content', 'publishedAt', 'category', 'language', 'status', 'author']) &&
+             data.keys().hasOnly(['headline', 'subtitle', 'slug', 'summary', 'content', 'imageUrl', 'imageCaption', 'publishedAt', 'category', 'language', 'status', 'author', 'featured', 'views', 'tags', 'seoTitle', 'seoDescription']) &&
+             data.headline is string && data.headline.size() > 0 && data.headline.size() <= 200 &&
+             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 200 && data.slug.matches('^[a-z0-9-]+$') &&
+             data.content is string && data.content.size() <= 200000 &&
+             data.publishedAt is string && data.publishedAt.size() <= 64 &&
+             data.category in ['News', 'Economy', 'Infrastructure', 'Updates', 'Business', 'Technology', 'International'] &&
+             data.language in ['Kinyarwanda', 'English'] &&
+             data.status in ['published', 'draft', 'scheduled'] &&
+             data.author is string && data.author.size() > 0 && data.author.size() <= 120 &&
+             (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 500)) &&
+             (!('summary' in data) || (data.summary is string && data.summary.size() <= 1000)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
+             (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 500)) &&
+             (!('featured' in data) || data.featured is bool) &&
+             (!('views' in data) || (data.views is int && data.views >= 0)) &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 15 && (data.tags.size() == 0 || data.tags[0] is string))) &&
+             (!('seoTitle' in data) || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
+             (!('seoDescription' in data) || (data.seoDescription is string && data.seoDescription.size() <= 250));
+    }
+
+    function isValidOpportunity(data) {
+      return data.keys().hasAll(['title', 'slug', 'organization', 'deadline', 'category', 'description', 'status']) &&
+             data.keys().hasOnly(['title', 'slug', 'organization', 'organizationLogo', 'location', 'deadline', 'category', 'subCategory', 'type', 'salary', 'description', 'responsibilities', 'qualifications', 'requirements', 'benefits', 'applicationInstructions', 'applyUrl', 'status', 'views', 'clicks', 'createdAt', 'featured', 'institution', 'country', 'scholarshipType', 'requiredDocuments', 'tenderRef', 'issuingOrg', 'submissionInstructions', 'downloadUrl', 'contactInfo']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 200 && data.slug.matches('^[a-z0-9-]+$') &&
+             data.organization is string && data.organization.size() > 0 && data.organization.size() <= 200 &&
+             data.deadline is string && data.deadline.size() <= 64 &&
+             data.category in ['Jobs', 'Scholarships', 'Tenders', 'Others'] &&
+             data.description is string && data.description.size() <= 100000 &&
+             data.status in ['active', 'draft', 'expired'] &&
+             (!('location' in data) || (data.location is string && data.location.size() <= 200)) &&
+             (!('subCategory' in data) || (data.subCategory is string && data.subCategory.size() <= 100)) &&
+             (!('type' in data) || (data.type is string && data.type.size() <= 100)) &&
+             (!('salary' in data) || (data.salary is string && data.salary.size() <= 100)) &&
+             (!('applyUrl' in data) || (data.applyUrl is string && data.applyUrl.size() <= 1000)) &&
+             (!('views' in data) || (data.views is int && data.views >= 0)) &&
+             (!('clicks' in data) || (data.clicks is int && data.clicks >= 0)) &&
+             (!('featured' in data) || data.featured is bool);
+    }
+
+    function isValidPage(data) {
+      return data.keys().hasAll(['title', 'slug', 'content', 'status', 'lastUpdated']) &&
+             data.keys().hasOnly(['title', 'slug', 'content', 'status', 'lastUpdated', 'seoTitle', 'seoDescription']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 120 &&
+             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 120 && data.slug.matches('^[a-z0-9-]+$') &&
+             data.content is string && data.content.size() <= 200000 &&
+             data.status in ['published', 'draft'] &&
+             data.lastUpdated is string && data.lastUpdated.size() <= 64 &&
+             (!('seoTitle' in data) || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
+             (!('seoDescription' in data) || (data.seoDescription is string && data.seoDescription.size() <= 250));
+    }
+
+    function isValidMedia(data) {
+      return data.keys().hasAll(['url', 'name', 'createdAt']) &&
+             data.keys().hasOnly(['url', 'name', 'createdAt']) &&
+             data.url is string && data.url.size() > 0 && data.url.size() <= 1000 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'status']) &&
+             data.keys().hasOnly(['email', 'role', 'status']) &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+             data.role in ['super_admin', 'admin', 'editor', 'content_manager', 'user'] &&
+             data.status in ['active', 'suspended'];
+    }
+
+    function isValidSubscriber(data) {
+      return data.keys().hasAll(['email', 'subscribedAt', 'status']) &&
+             data.keys().hasOnly(['email', 'subscribedAt', 'status']) &&
+             data.email is string && data.email.size() > 3 && data.email.size() <= 150 &&
+             data.subscribedAt is string && data.subscribedAt.size() <= 64 &&
+             data.status in ['active', 'unsubscribed'];
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['name', 'email', 'subject', 'message', 'timestamp', 'status']) &&
+             data.keys().hasOnly(['name', 'email', 'subject', 'message', 'timestamp', 'status']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.email is string && data.email.size() > 3 && data.email.size() <= 150 &&
+             data.subject is string && data.subject.size() > 0 && data.subject.size() <= 200 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 5000 &&
+             data.timestamp is string && data.timestamp.size() <= 64 &&
+             data.status in ['unread', 'read', 'archived'];
+    }
+
+    function isValidAnalytics(data) {
+      return data.keys().hasAll(['type', 'timestamp']) &&
+             data.keys().hasOnly(['type', 'path', 'visitorId', 'device', 'category', 'timestamp', 'targetId']) &&
+             data.type in ['page_view', 'click'] &&
+             data.timestamp is string && data.timestamp.size() <= 64 &&
+             (!('path' in data) || (data.path is string && data.path.size() <= 500)) &&
+             (!('visitorId' in data) || (data.visitorId is string && data.visitorId.size() <= 100)) &&
+             (!('device' in data) || (data.device is string && data.device.size() <= 50)) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 50)) &&
+             (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 128));
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['adminId', 'action', 'module', 'timestamp']) &&
+             data.keys().hasOnly(['adminId', 'adminName', 'action', 'module', 'targetId', 'details', 'timestamp']) &&
+             data.adminId is string && data.adminId == request.auth.uid &&
+             data.action is string && data.action.size() <= 50 &&
+             data.module is string && data.module.size() <= 50 &&
+             data.timestamp is string && data.timestamp.size() <= 64 &&
+             (!('adminName' in data) || (data.adminName is string && data.adminName.size() <= 150)) &&
+             (!('targetId' in data) || data.targetId == null || (data.targetId is string && data.targetId.size() <= 128)) &&
+             (!('details' in data) || (data.details is string && data.details.size() <= 1000));
+    }
+
+    // Connection check doc
+    match /test/{testId} {
+      allow get: if isValidId(testId) && testId == 'connection';
     }
 
     // News
     match /news/{articleId} {
-      allow read: if articleId != null; // Public read
-      allow create, update, delete: if isAdmin();
-      
-      function isValidNews(data) {
-        return data.headline is string && data.headline.size() <= 200 &&
-               data.slug is string && data.slug.matches('^[a-z0-9-]+$') &&
-               data.content is string &&
-               data.status in ['published', 'draft', 'scheduled'];
-      }
+      allow get: if isValidId(articleId) && (existing().status == 'published' || isAdmin());
+      allow list: if resource.data.status == 'published' || isAdmin();
+      allow create: if isAdmin() && isValidId(articleId) && isValidNews(incoming());
+      allow update: if isValidId(articleId) && (
+        (isAdmin() && isValidNews(incoming())) ||
+        (existing().status == 'published' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['views']) &&
+         incoming().views is int &&
+         incoming().views == existing().views + 1)
+      );
+      allow delete: if isAdmin() && isValidId(articleId);
     }
 
     // Opportunities
     match /opportunities/{oppId} {
-      allow read: if oppId != null; // Public read
-      allow create, update, delete: if isAdmin();
-      
-      function isValidOpportunity(data) {
-        return data.title is string && data.title.size() <= 200 &&
-               data.slug is string && data.slug.matches('^[a-z0-9-]+$') &&
-               data.category in ['Jobs', 'Scholarships', 'Tenders', 'Others'] &&
-               data.status in ['active', 'draft', 'expired'];
-      }
+      allow get: if isValidId(oppId) && (existing().status == 'active' || isAdmin());
+      allow list: if resource.data.status == 'active' || isAdmin();
+      allow create: if isAdmin() && isValidId(oppId) && isValidOpportunity(incoming());
+      allow update: if isValidId(oppId) && (
+        (isAdmin() && isValidOpportunity(incoming())) ||
+        (existing().status == 'active' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['views']) &&
+         incoming().views is int &&
+         incoming().views == existing().views + 1) ||
+        (existing().status == 'active' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['clicks']) &&
+         incoming().clicks is int &&
+         incoming().clicks == existing().clicks + 1)
+      );
+      allow delete: if isAdmin() && isValidId(oppId);
     }
 
     // Pages
     match /pages/{pageId} {
-      allow read: if pageId != null;
-      allow create, update, delete: if isAdmin();
+      allow get: if isValidId(pageId) && (existing().status == 'published' || isAdmin());
+      allow list: if resource.data.status == 'published' || isAdmin();
+      allow create, update: if isAdmin() && isValidId(pageId) && isValidPage(incoming());
+      allow delete: if isAdmin() && isValidId(pageId);
     }
 
-    // Users (RBAC)
+    // Media Library
+    match /media/{mediaId} {
+      allow get: if isAdmin() && isValidId(mediaId);
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(mediaId) && isValidMedia(incoming());
+      allow delete: if isAdmin() && isValidId(mediaId);
+    }
+
+    // Users (RBAC & PII isolation)
     match /users/{userId} {
-      allow read: if isVerified() && (request.auth.uid == userId || isAdmin());
-      allow create: if isSuperAdmin() || (isVerified() && request.auth.token.email == 'emmanuelmuke58@gmail.com');
-      allow update, delete: if isSuperAdmin();
+      allow get: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isValidUser(incoming()) && (
+        isSuperAdmin() ||
+        (isBootstrappedSuperAdmin() && request.auth.uid == userId && incoming().role == 'super_admin' && incoming().status == 'active')
+      );
+      allow update: if isSuperAdmin() && isValidId(userId) && isValidUser(incoming());
+      allow delete: if isSuperAdmin() && isValidId(userId);
     }
 
     // Subscribers
     match /subscribers/{subId} {
-      allow create: if incoming().email is string && incoming().email.size() <= 100;
-      allow read, update, delete: if isAdmin();
+      allow create: if isValidId(subId) && isValidSubscriber(incoming()) && incoming().status == 'active';
+      allow get: if isAdmin() && isValidId(subId);
+      allow list: if isAdmin();
+      allow update: if isAdmin() && isValidId(subId) && isValidSubscriber(incoming());
+      allow delete: if isAdmin() && isValidId(subId);
     }
 
     // Messages (Contact Form)
     match /messages/{messageId} {
-      allow create: if incoming().email is string && incoming().email.size() <= 100;
-      allow read, update, delete: if isAdmin();
+      allow create: if isValidId(messageId) && isValidMessage(incoming()) && incoming().status == 'unread';
+      allow get: if isAdmin() && isValidId(messageId);
+      allow list: if isAdmin();
+      allow update: if isAdmin() && isValidId(messageId) && isValidMessage(incoming());
+      allow delete: if isAdmin() && isValidId(messageId);
     }
 
     // Analytics
     match /analytics/{eventId} {
-      allow create: if incoming().type in ['page_view', 'click'];
-      allow read: if isAdmin();
+      allow create: if isValidId(eventId) && isValidAnalytics(incoming());
+      allow get: if isAdmin() && isValidId(eventId);
+      allow list: if isAdmin();
     }
 
     // Activity Logs
     match /activityLogs/{logId} {
-      allow create: if isAdmin();
-      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidId(logId) && isValidLog(incoming());
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isAdmin();
     }
 
     // Settings
     match /settings/{settingId} {
-      allow read: if settingId != null;
-      allow write: if isSuperAdmin();
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create, update, delete: if isSuperAdmin() && isValidId(settingId);
     }
   }
 }

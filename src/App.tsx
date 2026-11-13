@@ -31,25 +31,30 @@ export default function App() {
           <Route path="news" element={<NewsListingPage />} />
           <Route path="news/category/:category" element={<NewsListingPage />} />
           <Route path="news/:slug" element={<NewsDetailPage />} />
-          
+
           <Route path="jobs" element={<OpportunitiesListingPage />} />
+          <Route path="jobs/category/:subCategory" element={<OpportunitiesListingPage />} />
           <Route path="jobs/:slug" element={<OpportunityDetailPage />} />
-          
+
           <Route path="scholarships" element={<OpportunitiesListingPage />} />
+          <Route path="scholarships/category/:subCategory" element={<OpportunitiesListingPage />} />
           <Route path="scholarships/:slug" element={<OpportunityDetailPage />} />
-          
+
           <Route path="tenders" element={<OpportunitiesListingPage />} />
+          <Route path="tenders/category/:subCategory" element={<OpportunitiesListingPage />} />
           <Route path="tenders/:slug" element={<OpportunityDetailPage />} />
-          
+
           <Route path="opportunities" element={<OpportunitiesListingPage />} />
+          <Route path="opportunities/category/:subCategory" element={<OpportunitiesListingPage />} />
           <Route path="opportunities/:slug" element={<OpportunityDetailPage />} />
-          
+
           <Route path="search" element={<SearchPage />} />
-          
+
           <Route path="p/:slug" element={<StaticPage />} />
           <Route path="about" element={<StaticPage />} />
           <Route path="contact" element={<ContactPage />} />
           <Route path="privacy" element={<StaticPage />} />
+          <Route path="terms" element={<StaticPage />} />
         </Route>
 
         {/* Admin Dashboard Routes */}
@@ -72,7 +77,7 @@ export default function App() {
 
         {/* Auth Fallback */}
         <Route path="/admin/login" element={<AdminPage />} />
-        
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
