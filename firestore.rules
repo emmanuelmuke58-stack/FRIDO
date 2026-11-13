@@ -43,12 +43,28 @@ service cloud.firestore {
       return userExists() && getUserData().status == 'active';
     }
 
+    function isVerifiedActor() {
+      return isBootstrappedSuperAdmin() || (isVerified() && isActiveUser());
+    }
+
     function hasRole(role) {
       return isVerified() && isActiveUser() && getUserData().role == role;
     }
 
     function isSuperAdmin() {
       return isBootstrappedSuperAdmin() || hasRole('super_admin');
+    }
+
+    function isFullAdmin() {
+      return isSuperAdmin() || hasRole('admin');
+    }
+
+    function isContentManager() {
+      return hasRole('content_manager');
+    }
+
+    function isEditor() {
+      return hasRole('editor');
     }
 
     function isAdmin() {
@@ -58,74 +74,298 @@ service cloud.firestore {
       );
     }
 
+    function hasDeleteFlag() {
+      return !('canDelete' in getUserData()) || getUserData().canDelete == true;
+    }
+
+    function hasModuleAccess(mod) {
+      return !('assignedModules' in getUserData()) ||
+             getUserData().assignedModules.size() == 0 ||
+             (mod in getUserData().assignedModules);
+    }
+
+    function canSoftDeleteContent(existingData, mod) {
+      return isFullAdmin() ||
+        (isContentManager() && hasDeleteFlag() && hasModuleAccess(mod)) ||
+        (isEditor() && ('canDelete' in getUserData() && getUserData().canDelete == true) &&
+         ('authorId' in existingData && existingData.authorId == request.auth.uid));
+    }
+
+    function isProtectedPage(pageData) {
+      return (('slug' in pageData) && pageData.slug in ['home', 'login', 'about', 'privacy', 'terms', 'contact', 'admin']) ||
+             ('isSystem' in pageData && pageData.isSystem == true);
+    }
+
+    function isValidUrlList(listVal) {
+      return listVal is list &&
+             listVal.size() <= 8 &&
+             (listVal.size() == 0 || (listVal[0] is string && listVal[0].size() <= 2000));
+    }
+
+    // Action-specific metadata validators for Soft Delete and Restore
+    function isValidSoftDeletePayload(data) {
+      return data.status == 'deleted' &&
+             data.deletedAt is string && data.deletedAt.size() > 0 && data.deletedAt.size() <= 64 &&
+             data.deletedBy is string && data.deletedBy.size() > 0 && data.deletedBy.size() <= 128 &&
+             data.deletedByName is string && data.deletedByName.size() > 0 && data.deletedByName.size() <= 150 &&
+             (!('previousStatus' in data) || data.previousStatus == null || (data.previousStatus is string && data.previousStatus.size() <= 30)) &&
+             (!('deleteReason' in data) || data.deleteReason == null || (data.deleteReason is string && data.deleteReason.size() <= 500));
+    }
+
+    function isValidRestorePayload(data, allowedStatuses) {
+      return data.status in allowedStatuses &&
+             (!('deletedAt' in data) || data.deletedAt == null) &&
+             (!('deletedBy' in data) || data.deletedBy == null) &&
+             (!('deletedByName' in data) || data.deletedByName == null) &&
+             (!('previousStatus' in data) || data.previousStatus == null) &&
+             (!('deleteReason' in data) || data.deleteReason == null);
+    }
+
+    function isSoftDeleteAction(inData, exData) {
+      return inData.diff(exData).affectedKeys().hasOnly([
+               'status', 'previousStatus', 'deletedAt', 'deletedBy', 'deletedByName', 'deleteReason'
+             ]) &&
+             isValidSoftDeletePayload(inData);
+    }
+
+    function isRestoreAction(inData, exData, allowedStatuses) {
+      return exData.status == 'deleted' &&
+             inData.diff(exData).affectedKeys().hasOnly([
+               'status', 'deletedAt', 'deletedBy', 'deletedByName', 'previousStatus', 'deleteReason'
+             ]) &&
+             isValidRestorePayload(inData, allowedStatuses);
+    }
+
+    // Entity Blueprints
     function isValidNews(data) {
       return data.keys().hasAll(['headline', 'slug', 'content', 'publishedAt', 'category', 'language', 'status', 'author']) &&
-             data.keys().hasOnly(['headline', 'subtitle', 'slug', 'summary', 'content', 'imageUrl', 'imageCaption', 'publishedAt', 'category', 'language', 'status', 'author', 'featured', 'views', 'tags', 'seoTitle', 'seoDescription']) &&
+             data.keys().hasOnly([
+               'headline', 'subtitle', 'slug', 'summary', 'content', 'imageUrl', 'imageCaption',
+               'publishedAt', 'category', 'language', 'status', 'author', 'authorId', 'authorAvatar', 'featured',
+               'views', 'tags', 'seoTitle', 'seoDescription',
+               'deletedAt', 'deletedBy', 'deletedByName', 'previousStatus', 'deleteReason'
+             ]) &&
              data.headline is string && data.headline.size() > 0 && data.headline.size() <= 200 &&
              data.slug is string && data.slug.size() > 0 && data.slug.size() <= 200 && data.slug.matches('^[a-z0-9-]+$') &&
              data.content is string && data.content.size() <= 200000 &&
              data.publishedAt is string && data.publishedAt.size() <= 64 &&
-             data.category in ['News', 'Economy', 'Infrastructure', 'Updates', 'Business', 'Technology', 'International'] &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
              data.language in ['Kinyarwanda', 'English'] &&
-             data.status in ['published', 'draft', 'scheduled'] &&
+             data.status in ['published', 'draft', 'scheduled', 'deleted'] &&
              data.author is string && data.author.size() > 0 && data.author.size() <= 120 &&
-             (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 500)) &&
-             (!('summary' in data) || (data.summary is string && data.summary.size() <= 1000)) &&
-             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
-             (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 500)) &&
+             (!('authorId' in data) || data.authorId == null || (data.authorId is string && data.authorId.size() <= 128)) &&
+             (!('authorAvatar' in data) || data.authorAvatar == null || (data.authorAvatar is string && data.authorAvatar.size() <= 2000)) &&
+             (!('subtitle' in data) || data.subtitle == null || (data.subtitle is string && data.subtitle.size() <= 500)) &&
+             (!('summary' in data) || data.summary == null || (data.summary is string && data.summary.size() <= 1000)) &&
+             (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2000)) &&
+             (!('imageCaption' in data) || data.imageCaption == null || (data.imageCaption is string && data.imageCaption.size() <= 500)) &&
              (!('featured' in data) || data.featured is bool) &&
              (!('views' in data) || (data.views is int && data.views >= 0)) &&
-             (!('tags' in data) || (data.tags is list && data.tags.size() <= 15 && (data.tags.size() == 0 || data.tags[0] is string))) &&
-             (!('seoTitle' in data) || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
-             (!('seoDescription' in data) || (data.seoDescription is string && data.seoDescription.size() <= 250));
+             (!('tags' in data) || data.tags == null || (data.tags is list && data.tags.size() <= 15 && (data.tags.size() == 0 || data.tags[0] is string))) &&
+             (!('seoTitle' in data) || data.seoTitle == null || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
+             (!('seoDescription' in data) || data.seoDescription == null || (data.seoDescription is string && data.seoDescription.size() <= 250)) &&
+             (!('deletedAt' in data) || data.deletedAt == null || (data.deletedAt is string && data.deletedAt.size() <= 64)) &&
+             (!('deletedBy' in data) || data.deletedBy == null || (data.deletedBy is string && data.deletedBy.size() <= 128)) &&
+             (!('deletedByName' in data) || data.deletedByName == null || (data.deletedByName is string && data.deletedByName.size() <= 150)) &&
+             (!('previousStatus' in data) || data.previousStatus == null || (data.previousStatus is string && data.previousStatus.size() <= 30)) &&
+             (!('deleteReason' in data) || data.deleteReason == null || (data.deleteReason is string && data.deleteReason.size() <= 500));
+    }
+
+    function isValidNewsUpdate(inData, exData) {
+      return isSoftDeleteAction(inData, exData) ||
+             isRestoreAction(inData, exData, ['published', 'draft', 'scheduled']) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['status']) && inData.status in ['published', 'draft', 'scheduled']) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['featured']) && inData.featured is bool) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['category']) && inData.category is string && inData.category.size() > 0 && inData.category.size() <= 100) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['imageUrl', 'content', 'authorAvatar']) &&
+              (!('imageUrl' in inData) || inData.imageUrl == null || (inData.imageUrl is string && inData.imageUrl.size() <= 2000)) &&
+              (!('authorAvatar' in inData) || inData.authorAvatar == null || (inData.authorAvatar is string && inData.authorAvatar.size() <= 2000)) &&
+              (!('content' in inData) || (inData.content is string && inData.content.size() <= 200000))) ||
+             isValidNews(inData);
     }
 
     function isValidOpportunity(data) {
       return data.keys().hasAll(['title', 'slug', 'organization', 'deadline', 'category', 'description', 'status']) &&
-             data.keys().hasOnly(['title', 'slug', 'organization', 'organizationLogo', 'location', 'deadline', 'category', 'subCategory', 'type', 'salary', 'description', 'responsibilities', 'qualifications', 'requirements', 'benefits', 'applicationInstructions', 'applyUrl', 'status', 'views', 'clicks', 'createdAt', 'featured', 'institution', 'country', 'scholarshipType', 'requiredDocuments', 'tenderRef', 'issuingOrg', 'submissionInstructions', 'downloadUrl', 'contactInfo']) &&
+             data.keys().hasOnly([
+               'title', 'slug', 'organization', 'organizationLogo', 'coverImageUrl', 'galleryImages',
+               'location', 'deadline', 'category', 'subCategory', 'type', 'salary', 'description', 'responsibilities',
+               'qualifications', 'requirements', 'benefits', 'applicationInstructions', 'applyUrl',
+               'status', 'views', 'clicks', 'createdAt', 'featured', 'authorId', 'institution',
+               'country', 'scholarshipType', 'requiredDocuments', 'tenderRef', 'issuingOrg',
+               'submissionInstructions', 'downloadUrl', 'contactInfo',
+               'deletedAt', 'deletedBy', 'deletedByName', 'previousStatus', 'deleteReason'
+             ]) &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
              data.slug is string && data.slug.size() > 0 && data.slug.size() <= 200 && data.slug.matches('^[a-z0-9-]+$') &&
              data.organization is string && data.organization.size() > 0 && data.organization.size() <= 200 &&
              data.deadline is string && data.deadline.size() <= 64 &&
              data.category in ['Jobs', 'Scholarships', 'Tenders', 'Others'] &&
              data.description is string && data.description.size() <= 100000 &&
-             data.status in ['active', 'draft', 'expired'] &&
-             (!('location' in data) || (data.location is string && data.location.size() <= 200)) &&
-             (!('subCategory' in data) || (data.subCategory is string && data.subCategory.size() <= 100)) &&
-             (!('type' in data) || (data.type is string && data.type.size() <= 100)) &&
-             (!('salary' in data) || (data.salary is string && data.salary.size() <= 100)) &&
-             (!('applyUrl' in data) || (data.applyUrl is string && data.applyUrl.size() <= 1000)) &&
+             data.status in ['active', 'draft', 'expired', 'deleted'] &&
+             (!('authorId' in data) || data.authorId == null || (data.authorId is string && data.authorId.size() <= 128)) &&
+             (!('location' in data) || data.location == null || (data.location is string && data.location.size() <= 200)) &&
+             (!('subCategory' in data) || data.subCategory == null || (data.subCategory is string && data.subCategory.size() <= 100)) &&
+             (!('type' in data) || data.type == null || (data.type is string && data.type.size() <= 100)) &&
+             (!('salary' in data) || data.salary == null || (data.salary is string && data.salary.size() <= 100)) &&
+             (!('applyUrl' in data) || data.applyUrl == null || (data.applyUrl is string && data.applyUrl.size() <= 2000)) &&
+             (!('downloadUrl' in data) || data.downloadUrl == null || (data.downloadUrl is string && data.downloadUrl.size() <= 2000)) &&
+             (!('organizationLogo' in data) || data.organizationLogo == null || (data.organizationLogo is string && data.organizationLogo.size() <= 2000)) &&
+             (!('coverImageUrl' in data) || data.coverImageUrl == null || (data.coverImageUrl is string && data.coverImageUrl.size() <= 2000)) &&
+             (!('galleryImages' in data) || data.galleryImages == null || isValidUrlList(data.galleryImages)) &&
              (!('views' in data) || (data.views is int && data.views >= 0)) &&
              (!('clicks' in data) || (data.clicks is int && data.clicks >= 0)) &&
-             (!('featured' in data) || data.featured is bool);
+             (!('featured' in data) || data.featured is bool) &&
+             (!('deletedAt' in data) || data.deletedAt == null || (data.deletedAt is string && data.deletedAt.size() <= 64)) &&
+             (!('deletedBy' in data) || data.deletedBy == null || (data.deletedBy is string && data.deletedBy.size() <= 128)) &&
+             (!('deletedByName' in data) || data.deletedByName == null || (data.deletedByName is string && data.deletedByName.size() <= 150)) &&
+             (!('previousStatus' in data) || data.previousStatus == null || (data.previousStatus is string && data.previousStatus.size() <= 30)) &&
+             (!('deleteReason' in data) || data.deleteReason == null || (data.deleteReason is string && data.deleteReason.size() <= 500));
+    }
+
+    function isValidOpportunityUpdate(inData, exData) {
+      return isSoftDeleteAction(inData, exData) ||
+             isRestoreAction(inData, exData, ['active', 'draft', 'expired']) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['status']) && inData.status in ['active', 'draft', 'expired']) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['featured']) && inData.featured is bool) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['subCategory']) && (inData.subCategory == null || (inData.subCategory is string && inData.subCategory.size() <= 100))) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['organizationLogo', 'coverImageUrl', 'galleryImages', 'downloadUrl', 'description']) &&
+              (!('organizationLogo' in inData) || inData.organizationLogo == null || (inData.organizationLogo is string && inData.organizationLogo.size() <= 2000)) &&
+              (!('coverImageUrl' in inData) || inData.coverImageUrl == null || (inData.coverImageUrl is string && inData.coverImageUrl.size() <= 2000)) &&
+              (!('galleryImages' in inData) || inData.galleryImages == null || isValidUrlList(inData.galleryImages)) &&
+              (!('downloadUrl' in inData) || inData.downloadUrl == null || (inData.downloadUrl is string && inData.downloadUrl.size() <= 2000)) &&
+              (!('description' in inData) || (inData.description is string && inData.description.size() <= 100000))) ||
+             isValidOpportunity(inData);
     }
 
     function isValidPage(data) {
       return data.keys().hasAll(['title', 'slug', 'content', 'status', 'lastUpdated']) &&
-             data.keys().hasOnly(['title', 'slug', 'content', 'status', 'lastUpdated', 'seoTitle', 'seoDescription']) &&
+             data.keys().hasOnly([
+               'title', 'slug', 'content', 'imageUrl', 'status', 'lastUpdated', 'seoTitle', 'seoDescription',
+               'isSystem', 'deletedAt', 'deletedBy', 'deletedByName', 'previousStatus', 'deleteReason'
+             ]) &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 120 &&
              data.slug is string && data.slug.size() > 0 && data.slug.size() <= 120 && data.slug.matches('^[a-z0-9-]+$') &&
              data.content is string && data.content.size() <= 200000 &&
-             data.status in ['published', 'draft'] &&
+             data.status in ['published', 'draft', 'deleted'] &&
              data.lastUpdated is string && data.lastUpdated.size() <= 64 &&
-             (!('seoTitle' in data) || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
-             (!('seoDescription' in data) || (data.seoDescription is string && data.seoDescription.size() <= 250));
+             (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2000)) &&
+             (!('isSystem' in data) || data.isSystem is bool) &&
+             (!('seoTitle' in data) || data.seoTitle == null || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
+             (!('seoDescription' in data) || data.seoDescription == null || (data.seoDescription is string && data.seoDescription.size() <= 250)) &&
+             (!('deletedAt' in data) || data.deletedAt == null || (data.deletedAt is string && data.deletedAt.size() <= 64)) &&
+             (!('deletedBy' in data) || data.deletedBy == null || (data.deletedBy is string && data.deletedBy.size() <= 128)) &&
+             (!('deletedByName' in data) || data.deletedByName == null || (data.deletedByName is string && data.deletedByName.size() <= 150)) &&
+             (!('previousStatus' in data) || data.previousStatus == null || (data.previousStatus is string && data.previousStatus.size() <= 30)) &&
+             (!('deleteReason' in data) || data.deleteReason == null || (data.deleteReason is string && data.deleteReason.size() <= 500));
+    }
+
+    function isValidPageUpdate(inData, exData) {
+      return isSoftDeleteAction(inData, exData) ||
+             isRestoreAction(inData, exData, ['published', 'draft']) ||
+             (inData.diff(exData).affectedKeys().hasOnly(['content', 'imageUrl']) &&
+              (!('content' in inData) || (inData.content is string && inData.content.size() <= 200000)) &&
+              (!('imageUrl' in inData) || inData.imageUrl == null || (inData.imageUrl is string && inData.imageUrl.size() <= 2000))) ||
+             isValidPage(inData);
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name', 'slug', 'module', 'status', 'createdAt']) &&
+             data.keys().hasOnly([
+               'name', 'slug', 'module', 'parentCategory', 'description', 'imageUrl', 'thumbnailUrl',
+               'status', 'createdAt',
+               'deletedAt', 'deletedBy', 'deletedByName', 'previousStatus', 'deleteReason'
+             ]) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 100 && data.slug.matches('^[a-z0-9-]+$') &&
+             data.module in ['News', 'Jobs', 'Scholarships', 'Tenders', 'Others'] &&
+             data.status in ['active', 'deleted'] &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             (!('parentCategory' in data) || data.parentCategory == null || (data.parentCategory is string && data.parentCategory.size() <= 100)) &&
+             (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 500)) &&
+             (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2000)) &&
+             (!('thumbnailUrl' in data) || data.thumbnailUrl == null || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 2000)) &&
+             (!('deletedAt' in data) || data.deletedAt == null || (data.deletedAt is string && data.deletedAt.size() <= 64)) &&
+             (!('deletedBy' in data) || data.deletedBy == null || (data.deletedBy is string && data.deletedBy.size() <= 128)) &&
+             (!('deletedByName' in data) || data.deletedByName == null || (data.deletedByName is string && data.deletedByName.size() <= 150)) &&
+             (!('previousStatus' in data) || data.previousStatus == null || (data.previousStatus is string && data.previousStatus.size() <= 30)) &&
+             (!('deleteReason' in data) || data.deleteReason == null || (data.deleteReason is string && data.deleteReason.size() <= 500));
+    }
+
+    function isValidCategoryUpdate(inData, exData) {
+      return isSoftDeleteAction(inData, exData) ||
+             isRestoreAction(inData, exData, ['active']) ||
+             isValidCategory(inData);
     }
 
     function isValidMedia(data) {
       return data.keys().hasAll(['url', 'name', 'createdAt']) &&
-             data.keys().hasOnly(['url', 'name', 'createdAt']) &&
-             data.url is string && data.url.size() > 0 && data.url.size() <= 1000 &&
+             data.keys().hasOnly([
+               'url', 'thumbnailUrl', 'assetId', 'name', 'mediaType', 'mimeType',
+               'size', 'width', 'height', 'uploadedBy', 'uploadedByName', 'createdAt', 'updatedAt'
+             ]) &&
+             data.url is string && data.url.size() > 0 && data.url.size() <= 2000 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
-             data.createdAt is string && data.createdAt.size() <= 64;
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             (!('thumbnailUrl' in data) || data.thumbnailUrl == null || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 2000)) &&
+             (!('assetId' in data) || data.assetId == null || isValidId(data.assetId)) &&
+             (!('mediaType' in data) || data.mediaType in ['image', 'video', 'pdf', 'document']) &&
+             (!('mimeType' in data) || data.mimeType == null || (data.mimeType is string && data.mimeType.size() <= 120)) &&
+             (!('size' in data) || (data.size is int && data.size >= 0 && data.size <= 20000000)) &&
+             (!('width' in data) || (data.width is int && data.width >= 0 && data.width <= 20000)) &&
+             (!('height' in data) || (data.height is int && data.height >= 0 && data.height <= 20000)) &&
+             (!('uploadedBy' in data) || data.uploadedBy == null || (data.uploadedBy is string && data.uploadedBy.size() <= 128)) &&
+             (!('uploadedByName' in data) || data.uploadedByName == null || (data.uploadedByName is string && data.uploadedByName.size() <= 150)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidMediaAsset(data) {
+      return data.keys().hasAll(['name', 'mediaType', 'mimeType', 'size', 'chunkCount', 'uploadedBy', 'createdAt']) &&
+             data.keys().hasOnly([
+               'name', 'mediaType', 'mimeType', 'thumbMimeType', 'size', 'width', 'height',
+               'chunkCount', 'uploadedBy', 'uploadedByName', 'createdAt', 'updatedAt'
+             ]) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.mediaType in ['image', 'video', 'pdf', 'document'] &&
+             data.mimeType in [
+               'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+               'image/heic', 'image/heif', 'image/x-icon', 'image/vnd.microsoft.icon',
+               'application/pdf', 'application/msword',
+               'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+             ] &&
+             data.size is int && data.size > 0 && data.size <= 16000000 &&
+             data.chunkCount is int && data.chunkCount > 0 && data.chunkCount <= 40 &&
+             data.uploadedBy is string && data.uploadedBy.size() > 0 && data.uploadedBy.size() <= 128 &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             (!('thumbMimeType' in data) || data.thumbMimeType == null || (data.thumbMimeType is string && data.thumbMimeType.size() <= 120)) &&
+             (!('width' in data) || (data.width is int && data.width >= 0 && data.width <= 20000)) &&
+             (!('height' in data) || (data.height is int && data.height >= 0 && data.height <= 20000)) &&
+             (!('uploadedByName' in data) || data.uploadedByName == null || (data.uploadedByName is string && data.uploadedByName.size() <= 150)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidMediaChunk(data) {
+      return data.keys().hasAll(['index', 'data']) &&
+             data.keys().hasOnly(['index', 'data']) &&
+             data.index is int && data.index >= 0 && data.index < 40 &&
+             data.data is bytes && data.data.size() > 0 && data.data.size() <= 600000;
+    }
+
+    function isValidMediaThumb(data) {
+      return data.keys().hasAll(['data']) &&
+             data.keys().hasOnly(['data']) &&
+             data.data is bytes && data.data.size() > 0 && data.data.size() <= 350000;
     }
 
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role', 'status']) &&
-             data.keys().hasOnly(['email', 'role', 'status']) &&
+             data.keys().hasOnly(['email', 'displayName', 'avatarUrl', 'role', 'status', 'canDelete', 'assignedModules']) &&
              data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
              data.role in ['super_admin', 'admin', 'editor', 'content_manager', 'user'] &&
-             data.status in ['active', 'suspended'];
+             data.status in ['active', 'suspended'] &&
+             (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 150)) &&
+             (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 2000)) &&
+             (!('canDelete' in data) || data.canDelete is bool) &&
+             (!('assignedModules' in data) || (data.assignedModules is list && data.assignedModules.size() <= 10 && (data.assignedModules.size() == 0 || data.assignedModules[0] is string)));
     }
 
     function isValidSubscriber(data) {
@@ -159,15 +399,33 @@ service cloud.firestore {
              (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 128));
     }
 
+    function isValidSavedReport(data) {
+      return data.keys().hasAll(['title', 'dateRange', 'format', 'createdBy', 'createdAt']) &&
+             data.keys().hasOnly(['title', 'dateRange', 'startDate', 'endDate', 'format', 'totalViews', 'createdBy', 'createdByName', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+             data.dateRange is string && data.dateRange.size() <= 30 &&
+             data.format in ['snapshot', 'pdf', 'xlsx'] &&
+             data.createdBy is string && data.createdBy.size() <= 128 &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 64)) &&
+             (!('endDate' in data) || (data.endDate is string && data.endDate.size() <= 64)) &&
+             (!('totalViews' in data) || (data.totalViews is int && data.totalViews >= 0)) &&
+             (!('createdByName' in data) || (data.createdByName is string && data.createdByName.size() <= 150));
+    }
+
     function isValidLog(data) {
       return data.keys().hasAll(['adminId', 'action', 'module', 'timestamp']) &&
-             data.keys().hasOnly(['adminId', 'adminName', 'action', 'module', 'targetId', 'details', 'timestamp']) &&
+             data.keys().hasOnly(['adminId', 'adminName', 'action', 'module', 'targetId', 'recordType', 'recordTitle', 'deletionType', 'reason', 'details', 'timestamp']) &&
              data.adminId is string && data.adminId == request.auth.uid &&
              data.action is string && data.action.size() <= 50 &&
              data.module is string && data.module.size() <= 50 &&
              data.timestamp is string && data.timestamp.size() <= 64 &&
              (!('adminName' in data) || (data.adminName is string && data.adminName.size() <= 150)) &&
              (!('targetId' in data) || data.targetId == null || (data.targetId is string && data.targetId.size() <= 128)) &&
+             (!('recordType' in data) || data.recordType == null || (data.recordType is string && data.recordType.size() <= 50)) &&
+             (!('recordTitle' in data) || data.recordTitle == null || (data.recordTitle is string && data.recordTitle.size() <= 200)) &&
+             (!('deletionType' in data) || data.deletionType == null || (data.deletionType is string && data.deletionType.size() <= 50)) &&
+             (!('reason' in data) || data.reason == null || (data.reason is string && data.reason.size() <= 500)) &&
              (!('details' in data) || (data.details is string && data.details.size() <= 1000));
     }
 
@@ -180,24 +438,34 @@ service cloud.firestore {
     match /news/{articleId} {
       allow get: if isValidId(articleId) && (existing().status == 'published' || isAdmin());
       allow list: if resource.data.status == 'published' || isAdmin();
-      allow create: if isAdmin() && isValidId(articleId) && isValidNews(incoming());
+      allow create: if isAdmin() && isValidId(articleId) && isValidNews(incoming()) && incoming().status != 'deleted';
       allow update: if isValidId(articleId) && (
-        (isAdmin() && isValidNews(incoming())) ||
+        (
+          isAdmin() &&
+          isValidNewsUpdate(incoming(), existing()) &&
+          (incoming().status != 'deleted' || existing().status == 'deleted' || canSoftDeleteContent(existing(), 'News')) &&
+          (existing().status != 'deleted' || incoming().status == 'deleted' || isFullAdmin())
+        ) ||
         (existing().status == 'published' &&
          incoming().diff(existing()).affectedKeys().hasOnly(['views']) &&
          incoming().views is int &&
          incoming().views == existing().views + 1)
       );
-      allow delete: if isAdmin() && isValidId(articleId);
+      allow delete: if isSuperAdmin() && isValidId(articleId);
     }
 
-    // Opportunities
+    // Opportunities (Jobs, Scholarships, Tenders, Others)
     match /opportunities/{oppId} {
       allow get: if isValidId(oppId) && (existing().status == 'active' || isAdmin());
       allow list: if resource.data.status == 'active' || isAdmin();
-      allow create: if isAdmin() && isValidId(oppId) && isValidOpportunity(incoming());
+      allow create: if isAdmin() && isValidId(oppId) && isValidOpportunity(incoming()) && incoming().status != 'deleted';
       allow update: if isValidId(oppId) && (
-        (isAdmin() && isValidOpportunity(incoming())) ||
+        (
+          isAdmin() &&
+          isValidOpportunityUpdate(incoming(), existing()) &&
+          (incoming().status != 'deleted' || existing().status == 'deleted' || canSoftDeleteContent(existing(), ('category' in existing()) ? existing().category : 'Others')) &&
+          (existing().status != 'deleted' || incoming().status == 'deleted' || isFullAdmin())
+        ) ||
         (existing().status == 'active' &&
          incoming().diff(existing()).affectedKeys().hasOnly(['views']) &&
          incoming().views is int &&
@@ -207,26 +475,88 @@ service cloud.firestore {
          incoming().clicks is int &&
          incoming().clicks == existing().clicks + 1)
       );
-      allow delete: if isAdmin() && isValidId(oppId);
+      allow delete: if isSuperAdmin() && isValidId(oppId);
     }
 
     // Pages
     match /pages/{pageId} {
       allow get: if isValidId(pageId) && (existing().status == 'published' || isAdmin());
       allow list: if resource.data.status == 'published' || isAdmin();
-      allow create, update: if isAdmin() && isValidId(pageId) && isValidPage(incoming());
-      allow delete: if isAdmin() && isValidId(pageId);
+      allow create: if isFullAdmin() && isValidId(pageId) && isValidPage(incoming()) && incoming().status != 'deleted';
+      allow update: if isFullAdmin() && isValidId(pageId) && isValidPageUpdate(incoming(), existing()) &&
+                    (incoming().status != 'deleted' || !isProtectedPage(existing()));
+      allow delete: if isSuperAdmin() && isValidId(pageId) && !isProtectedPage(existing());
+    }
+
+    // Categories
+    match /categories/{catId} {
+      allow get: if isValidId(catId) && (existing().status == 'active' || isAdmin());
+      allow list: if resource.data.status == 'active' || isAdmin();
+      allow create: if isFullAdmin() && isValidId(catId) && isValidCategory(incoming()) && incoming().status == 'active';
+      allow update: if isFullAdmin() && isValidId(catId) && isValidCategoryUpdate(incoming(), existing());
+      allow delete: if isSuperAdmin() && isValidId(catId);
     }
 
     // Media Library
     match /media/{mediaId} {
       allow get: if isAdmin() && isValidId(mediaId);
       allow list: if isAdmin();
-      allow create, update: if isAdmin() && isValidId(mediaId) && isValidMedia(incoming());
-      allow delete: if isAdmin() && isValidId(mediaId);
+      allow create: if isVerifiedActor() && isValidId(mediaId) && isValidMedia(incoming()) &&
+                    (isAdmin() || ('uploadedBy' in incoming() && incoming().uploadedBy == request.auth.uid));
+      allow update: if isAdmin() && isValidId(mediaId) && isValidMedia(incoming());
+      allow delete: if isValidId(mediaId) && (
+        isFullAdmin() ||
+        (isVerifiedActor() && 'uploadedBy' in existing() && existing().uploadedBy == request.auth.uid)
+      );
     }
 
-    // Users (RBAC & PII isolation)
+    // Persistent Media Assets & Chunked Binary Storage
+    match /mediaAssets/{assetId} {
+      function getParentAsset() {
+        return get(/databases/$(database)/documents/mediaAssets/$(assetId)).data;
+      }
+      function parentAssetExists() {
+        return exists(/databases/$(database)/documents/mediaAssets/$(assetId));
+      }
+
+      allow get: if isValidId(assetId);
+      allow list: if isAdmin();
+      allow create: if isVerifiedActor() && isValidId(assetId) && isValidMediaAsset(incoming()) &&
+                    incoming().uploadedBy == request.auth.uid;
+      allow update: if isVerifiedActor() && isValidId(assetId) && isValidMediaAsset(incoming()) &&
+                    incoming().createdAt == existing().createdAt &&
+                    (isFullAdmin() || existing().uploadedBy == request.auth.uid);
+      allow delete: if isValidId(assetId) && (
+        isFullAdmin() ||
+        (isVerifiedActor() && existing().uploadedBy == request.auth.uid)
+      );
+
+      match /chunks/{chunkId} {
+        allow get: if isValidId(assetId) && isValidId(chunkId);
+        allow list: if false;
+        allow create, update: if isVerifiedActor() && isValidId(assetId) && isValidId(chunkId) &&
+                              isValidMediaChunk(incoming()) && parentAssetExists() &&
+                              (isFullAdmin() || getParentAsset().uploadedBy == request.auth.uid);
+        allow delete: if isValidId(assetId) && isValidId(chunkId) && (
+          isFullAdmin() ||
+          (isVerifiedActor() && parentAssetExists() && getParentAsset().uploadedBy == request.auth.uid)
+        );
+      }
+
+      match /thumbs/{thumbId} {
+        allow get: if isValidId(assetId) && isValidId(thumbId);
+        allow list: if false;
+        allow create, update: if isVerifiedActor() && isValidId(assetId) && isValidId(thumbId) &&
+                              isValidMediaThumb(incoming()) && parentAssetExists() &&
+                              (isFullAdmin() || getParentAsset().uploadedBy == request.auth.uid);
+        allow delete: if isValidId(assetId) && isValidId(thumbId) && (
+          isFullAdmin() ||
+          (isVerifiedActor() && parentAssetExists() && getParentAsset().uploadedBy == request.auth.uid)
+        );
+      }
+    }
+
+    // Users (RBAC & PII isolation + self-avatar/displayName update + self-delete & last super-admin protection)
     match /users/{userId} {
       allow get: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
@@ -234,17 +564,32 @@ service cloud.firestore {
         isSuperAdmin() ||
         (isBootstrappedSuperAdmin() && request.auth.uid == userId && incoming().role == 'super_admin' && incoming().status == 'active')
       );
-      allow update: if isSuperAdmin() && isValidId(userId) && isValidUser(incoming());
-      allow delete: if isSuperAdmin() && isValidId(userId);
+      allow update: if isValidId(userId) && isValidUser(incoming()) && (
+        isSuperAdmin() ||
+        (isVerified() && isActiveUser() && request.auth.uid == userId &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['avatarUrl', 'displayName']) &&
+         incoming().role == existing().role &&
+         incoming().status == existing().status &&
+         incoming().email == existing().email)
+      );
+      allow delete: if isSuperAdmin() &&
+                    isValidId(userId) &&
+                    userId != request.auth.uid &&
+                    (!('email' in existing()) || existing().email != 'emmanuelmuke58@gmail.com');
     }
 
-    // Subscribers
+    // Subscribers (deterministic SHA-256 email doc IDs allow duplicate check & self-unsubscribe without exposing subscriber list)
     match /subscribers/{subId} {
       allow create: if isValidId(subId) && isValidSubscriber(incoming()) && incoming().status == 'active';
-      allow get: if isAdmin() && isValidId(subId);
+      allow get: if isAdmin() || (isValidId(subId) && subId.matches('^[a-f0-9]{64}$'));
       allow list: if isAdmin();
-      allow update: if isAdmin() && isValidId(subId) && isValidSubscriber(incoming());
-      allow delete: if isAdmin() && isValidId(subId);
+      allow update: if (isFullAdmin() && isValidId(subId) && isValidSubscriber(incoming())) ||
+                    (isValidId(subId) &&
+                     subId.matches('^[a-f0-9]{64}$') &&
+                     isValidSubscriber(incoming()) &&
+                     incoming().email == existing().email &&
+                     incoming().diff(existing()).affectedKeys().hasOnly(['status', 'subscribedAt']));
+      allow delete: if isFullAdmin() && isValidId(subId);
     }
 
     // Messages (Contact Form)
@@ -252,29 +597,42 @@ service cloud.firestore {
       allow create: if isValidId(messageId) && isValidMessage(incoming()) && incoming().status == 'unread';
       allow get: if isAdmin() && isValidId(messageId);
       allow list: if isAdmin();
-      allow update: if isAdmin() && isValidId(messageId) && isValidMessage(incoming());
-      allow delete: if isAdmin() && isValidId(messageId);
+      allow update: if isFullAdmin() && isValidId(messageId) && isValidMessage(incoming());
+      allow delete: if isFullAdmin() && isValidId(messageId);
     }
 
-    // Analytics
+    // Analytics (Protected from ordinary admins; only Super Admin can purge)
     match /analytics/{eventId} {
       allow create: if isValidId(eventId) && isValidAnalytics(incoming());
       allow get: if isAdmin() && isValidId(eventId);
       allow list: if isAdmin();
+      allow delete: if isSuperAdmin() && isValidId(eventId);
     }
 
-    // Activity Logs
+    // Saved Reports
+    match /savedReports/{reportId} {
+      allow get: if isAdmin() && isValidId(reportId);
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(reportId) && isValidSavedReport(incoming()) && incoming().createdBy == request.auth.uid;
+      allow update: if isFullAdmin() && isValidId(reportId) && isValidSavedReport(incoming());
+      allow delete: if isFullAdmin() && isValidId(reportId);
+    }
+
+    // Activity Logs (Immutable; only Super Admin may purge old retention logs)
     match /activityLogs/{logId} {
       allow create: if isAdmin() && isValidId(logId) && isValidLog(incoming());
       allow get: if isAdmin() && isValidId(logId);
       allow list: if isAdmin();
+      allow update: if false;
+      allow delete: if isSuperAdmin() && isValidId(logId);
     }
 
     // Settings
     match /settings/{settingId} {
       allow get: if isValidId(settingId);
       allow list: if true;
-      allow create, update, delete: if isSuperAdmin() && isValidId(settingId);
+      allow create, update: if isFullAdmin() && isValidId(settingId);
+      allow delete: if isSuperAdmin() && isValidId(settingId);
     }
   }
 }

@@ -1,25 +1,55 @@
 @import "tailwindcss";
 
 @theme {
-  --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-montserrat: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Google Sans", "Google Sans Fallback", Arial, sans-serif;
+  --font-google-sans: "Google Sans", "Google Sans Fallback", Arial, sans-serif;
 }
 
 @layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: "Google Sans", "Google Sans Fallback", Arial, sans-serif;
+    overflow-x: clip;
+  }
+
   body {
-    @apply font-inter text-[#102B4E] antialiased overflow-x-hidden;
+    color: rgb(40, 47, 47);
+    font-family: "Google Sans", "Google Sans Fallback", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 19px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+    min-width: 0;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
 
   h1 {
-    @apply text-[27px] md:text-5xl lg:text-6xl font-extrabold font-montserrat leading-tight text-balance;
+    @apply text-[25px] sm:text-[28px] md:text-[32px] lg:text-[36px] font-bold leading-tight text-balance;
   }
 
   h2 {
-    @apply text-[21px] md:text-3xl lg:text-4xl font-extrabold font-montserrat leading-tight text-balance;
+    @apply text-[22px] md:text-[26px] lg:text-[28px] font-bold leading-tight text-balance;
   }
 
-  p {
-    @apply text-base md:text-lg leading-[1.6] md:leading-[1.8];
+  h3 {
+    @apply text-[17px] md:text-[20px] font-semibold leading-snug;
+  }
+
+  p:not([class]) {
+    margin-block-end: 16px;
   }
 }
 
@@ -29,4 +59,161 @@
 
 @utility pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
+}
+
+@layer components {
+  .article-prose {
+    @apply text-[rgb(40,47,47)] text-[15px] md:text-[16px] leading-[1.68] break-words;
+    font-family: "Google Sans", "Google Sans Fallback", Arial, sans-serif;
+  }
+
+  .article-prose > *:first-child {
+    margin-top: 0;
+  }
+
+  .article-prose h1 {
+    @apply text-[25px] md:text-[32px] font-bold text-[#102B4E] mt-8 mb-4 leading-snug;
+  }
+
+  .article-prose h2 {
+    @apply text-[22px] md:text-[26px] font-bold text-[#102B4E] mt-8 mb-3.5 leading-snug;
+  }
+
+  .article-prose h3 {
+    @apply text-[18px] md:text-[20px] font-semibold text-[#102B4E] mt-6 mb-3 leading-snug;
+  }
+
+  .article-prose p {
+    @apply text-[15px] md:text-[16px] leading-[1.68] text-[rgb(40,47,47)];
+    margin-block-end: 16px;
+  }
+
+  .article-prose a {
+    @apply text-[#083D91] font-semibold underline decoration-[#14B8A6]/60 underline-offset-4 hover:text-[#14B8A6] transition-colors;
+  }
+
+  .article-prose strong,
+  .article-prose b {
+    @apply font-bold text-[#102B4E];
+  }
+
+  .article-prose ul {
+    @apply list-disc pl-6 mb-5 space-y-2 text-[rgb(40,47,47)] marker:text-[#14B8A6];
+  }
+
+  .article-prose ol {
+    @apply list-decimal pl-6 mb-5 space-y-2 text-[rgb(40,47,47)] marker:font-bold marker:text-[#083D91];
+  }
+
+  .article-prose li {
+    @apply text-[15px] md:text-[16px] leading-[1.68];
+  }
+
+  .article-prose blockquote {
+    @apply my-7 py-5 px-6 sm:px-8 rounded-2xl bg-[#F0FDFA] border border-[#CCFBF1] text-[#102B4E] italic text-lg md:text-xl leading-relaxed font-medium;
+  }
+
+  .article-prose blockquote p:last-child {
+    @apply mb-0;
+  }
+
+  .article-prose figure {
+    @apply my-7;
+  }
+
+  .article-prose figcaption {
+    @apply text-xs sm:text-[13px] text-slate-500 text-center mt-2.5 leading-relaxed;
+  }
+
+  .article-prose img {
+    @apply w-full h-auto rounded-2xl border border-slate-200/80 my-6 object-cover;
+  }
+
+  .article-prose iframe {
+    @apply w-full aspect-video rounded-2xl border border-slate-200/80 my-7;
+  }
+
+  .article-prose hr {
+    @apply my-8 border-slate-200;
+  }
+
+  .article-prose table {
+    @apply w-full border-collapse my-7 text-sm md:text-[15px] overflow-x-auto block sm:table;
+  }
+
+  .article-prose thead {
+    @apply bg-[#F1F5F9] text-[#102B4E];
+  }
+
+  .article-prose th {
+    @apply text-left font-bold px-4 py-3 border border-slate-200 whitespace-nowrap;
+  }
+
+  .article-prose td {
+    @apply px-4 py-3 border border-slate-200 text-[rgb(40,47,47)] align-top;
+  }
+
+  .article-prose pre {
+    @apply bg-slate-900 text-slate-100 rounded-xl p-4 my-6 overflow-x-auto text-sm font-mono;
+  }
+
+  .article-prose code {
+    @apply bg-slate-100 text-[#083D91] px-1.5 py-0.5 rounded text-sm font-mono;
+  }
+
+  .article-prose pre code {
+    @apply bg-transparent text-inherit p-0;
+  }
+
+  /* Ensure rich-text editor and charts inherit Google Sans and stay responsive on 320px+ */
+  .ql-toolbar.ql-snow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px !important;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    max-width: 100%;
+  }
+
+  .ql-toolbar.ql-snow .ql-formats {
+    margin-right: 6px !important;
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .ql-container.ql-snow {
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+    max-width: 100%;
+  }
+
+  .ql-editor {
+    min-height: 240px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  @media (min-width: 768px) {
+    .ql-editor {
+      min-height: 360px;
+    }
+  }
+
+  .ql-container,
+  .ql-editor,
+  .recharts-wrapper,
+  .recharts-wrapper text {
+    font-family: "Google Sans", "Google Sans Fallback", Arial, sans-serif !important;
+  }
+}
+
+@media print {
+  header,
+  footer,
+  nav[aria-label="Mobile quick navigation"],
+  .no-print {
+    display: none !important;
+  }
 }

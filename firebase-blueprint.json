@@ -10,18 +10,25 @@
         "slug": { "type": "string", "pattern": "^[a-z0-9-]+$", "maxLength": 200 },
         "summary": { "type": "string", "maxLength": 1000 },
         "content": { "type": "string", "maxLength": 200000 },
-        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "imageUrl": { "type": "string", "maxLength": 2000 },
         "imageCaption": { "type": "string", "maxLength": 500 },
         "publishedAt": { "type": "string", "format": "date-time" },
-        "category": { "type": "string", "enum": ["News", "Economy", "Infrastructure", "Updates", "Business", "Technology", "International"] },
+        "category": { "type": "string", "maxLength": 100 },
         "language": { "type": "string", "enum": ["Kinyarwanda", "English"] },
-        "status": { "type": "string", "enum": ["published", "draft", "scheduled"] },
+        "status": { "type": "string", "enum": ["published", "draft", "scheduled", "deleted"] },
         "author": { "type": "string", "maxLength": 120 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorAvatar": { "type": "string", "maxLength": 2000 },
         "featured": { "type": "boolean" },
         "views": { "type": "integer" },
         "tags": { "type": "array", "items": { "type": "string" } },
         "seoTitle": { "type": "string", "maxLength": 120 },
-        "seoDescription": { "type": "string", "maxLength": 250 }
+        "seoDescription": { "type": "string", "maxLength": 250 },
+        "deletedAt": { "type": "string", "format": "date-time" },
+        "deletedBy": { "type": "string", "maxLength": 128 },
+        "deletedByName": { "type": "string", "maxLength": 150 },
+        "previousStatus": { "type": "string", "maxLength": 30 },
+        "deleteReason": { "type": "string", "maxLength": 500 }
       },
       "required": ["headline", "slug", "content", "publishedAt", "category", "language", "status", "author"]
     },
@@ -33,7 +40,9 @@
         "title": { "type": "string", "maxLength": 200 },
         "slug": { "type": "string", "pattern": "^[a-z0-9-]+$", "maxLength": 200 },
         "organization": { "type": "string", "maxLength": 200 },
-        "organizationLogo": { "type": "string", "maxLength": 1000 },
+        "organizationLogo": { "type": "string", "maxLength": 2000 },
+        "coverImageUrl": { "type": "string", "maxLength": 2000 },
+        "galleryImages": { "type": "array", "items": { "type": "string" } },
         "location": { "type": "string", "maxLength": 200 },
         "deadline": { "type": "string", "format": "date-time" },
         "category": { "type": "string", "enum": ["Jobs", "Scholarships", "Tenders", "Others"] },
@@ -46,12 +55,13 @@
         "requirements": { "type": "string", "maxLength": 50000 },
         "benefits": { "type": "string", "maxLength": 50000 },
         "applicationInstructions": { "type": "string", "maxLength": 50000 },
-        "applyUrl": { "type": "string", "maxLength": 1000 },
-        "status": { "type": "string", "enum": ["active", "draft", "expired"] },
+        "applyUrl": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["active", "draft", "expired", "deleted"] },
         "views": { "type": "integer" },
         "clicks": { "type": "integer" },
         "createdAt": { "type": "string", "format": "date-time" },
         "featured": { "type": "boolean" },
+        "authorId": { "type": "string", "maxLength": 128 },
         "institution": { "type": "string", "maxLength": 200 },
         "country": { "type": "string", "maxLength": 100 },
         "scholarshipType": { "type": "string", "maxLength": 100 },
@@ -59,8 +69,13 @@
         "tenderRef": { "type": "string", "maxLength": 100 },
         "issuingOrg": { "type": "string", "maxLength": 200 },
         "submissionInstructions": { "type": "string", "maxLength": 20000 },
-        "downloadUrl": { "type": "string", "maxLength": 1000 },
-        "contactInfo": { "type": "string", "maxLength": 500 }
+        "downloadUrl": { "type": "string", "maxLength": 2000 },
+        "contactInfo": { "type": "string", "maxLength": 500 },
+        "deletedAt": { "type": "string", "format": "date-time" },
+        "deletedBy": { "type": "string", "maxLength": 128 },
+        "deletedByName": { "type": "string", "maxLength": 150 },
+        "previousStatus": { "type": "string", "maxLength": 30 },
+        "deleteReason": { "type": "string", "maxLength": 500 }
       },
       "required": ["title", "slug", "organization", "deadline", "category", "description", "status"]
     },
@@ -72,23 +87,101 @@
         "title": { "type": "string", "maxLength": 120 },
         "slug": { "type": "string", "pattern": "^[a-z0-9-]+$", "maxLength": 120 },
         "content": { "type": "string", "maxLength": 200000 },
-        "status": { "type": "string", "enum": ["published", "draft"] },
+        "imageUrl": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["published", "draft", "deleted"] },
         "lastUpdated": { "type": "string", "format": "date-time" },
         "seoTitle": { "type": "string", "maxLength": 120 },
-        "seoDescription": { "type": "string", "maxLength": 250 }
+        "seoDescription": { "type": "string", "maxLength": 250 },
+        "isSystem": { "type": "boolean" },
+        "deletedAt": { "type": "string", "format": "date-time" },
+        "deletedBy": { "type": "string", "maxLength": 128 },
+        "deletedByName": { "type": "string", "maxLength": 150 },
+        "previousStatus": { "type": "string", "maxLength": 30 },
+        "deleteReason": { "type": "string", "maxLength": 500 }
       },
       "required": ["title", "slug", "content", "status", "lastUpdated"]
     },
-    "MediaItem": {
-      "title": "Media Item",
-      "description": "An image or media asset stored in the media library",
+    "Category": {
+      "title": "Category",
+      "description": "Content category or subcategory across website modules",
       "type": "object",
       "properties": {
-        "url": { "type": "string", "maxLength": 1000 },
+        "name": { "type": "string", "maxLength": 100 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$", "maxLength": 100 },
+        "module": { "type": "string", "enum": ["News", "Jobs", "Scholarships", "Tenders", "Others"] },
+        "parentCategory": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "imageUrl": { "type": "string", "maxLength": 2000 },
+        "thumbnailUrl": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["active", "deleted"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deletedAt": { "type": "string", "format": "date-time" },
+        "deletedBy": { "type": "string", "maxLength": 128 },
+        "deletedByName": { "type": "string", "maxLength": 150 },
+        "previousStatus": { "type": "string", "maxLength": 30 },
+        "deleteReason": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["name", "slug", "module", "status", "createdAt"]
+    },
+    "MediaItem": {
+      "title": "Media Item",
+      "description": "An image, video, PDF, or document asset stored in the media library",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "maxLength": 2000 },
+        "thumbnailUrl": { "type": "string", "maxLength": 2000 },
+        "assetId": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 200 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "mediaType": { "type": "string", "enum": ["image", "video", "pdf", "document"] },
+        "mimeType": { "type": "string", "maxLength": 120 },
+        "size": { "type": "integer" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "uploadedBy": { "type": "string", "maxLength": 128 },
+        "uploadedByName": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["url", "name", "createdAt"]
+    },
+    "MediaAsset": {
+      "title": "Media Asset Manifest",
+      "description": "Persistent binary storage manifest for uploaded images and files",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 200 },
+        "mediaType": { "type": "string", "enum": ["image", "video", "pdf", "document"] },
+        "mimeType": { "type": "string", "maxLength": 120 },
+        "thumbMimeType": { "type": "string", "maxLength": 120 },
+        "size": { "type": "integer" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "chunkCount": { "type": "integer" },
+        "uploadedBy": { "type": "string", "maxLength": 128 },
+        "uploadedByName": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "mediaType", "mimeType", "size", "chunkCount", "uploadedBy", "createdAt"]
+    },
+    "MediaAssetChunk": {
+      "title": "Media Asset Binary Chunk",
+      "description": "Bounded binary chunk of an uploaded asset",
+      "type": "object",
+      "properties": {
+        "index": { "type": "integer" },
+        "data": { "type": "string", "format": "byte" }
+      },
+      "required": ["index", "data"]
+    },
+    "MediaAssetThumb": {
+      "title": "Media Asset Thumbnail",
+      "description": "Optimized thumbnail binary for an uploaded image asset",
+      "type": "object",
+      "properties": {
+        "data": { "type": "string", "format": "byte" }
+      },
+      "required": ["data"]
     },
     "AdminUser": {
       "title": "Admin User",
@@ -96,8 +189,12 @@
       "type": "object",
       "properties": {
         "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "displayName": { "type": "string", "maxLength": 150 },
+        "avatarUrl": { "type": "string", "maxLength": 2000 },
         "role": { "type": "string", "enum": ["super_admin", "admin", "editor", "content_manager", "user"] },
-        "status": { "type": "string", "enum": ["active", "suspended"] }
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "canDelete": { "type": "boolean" },
+        "assignedModules": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["email", "role", "status"]
     },
@@ -141,6 +238,23 @@
       },
       "required": ["type", "timestamp"]
     },
+    "SavedReport": {
+      "title": "Saved Report",
+      "description": "A saved analytics report configuration or generated export record",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 150 },
+        "dateRange": { "type": "string", "maxLength": 30 },
+        "startDate": { "type": "string", "maxLength": 64 },
+        "endDate": { "type": "string", "maxLength": 64 },
+        "format": { "type": "string", "enum": ["snapshot", "pdf", "xlsx"] },
+        "totalViews": { "type": "integer" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdByName": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "dateRange", "format", "createdBy", "createdAt"]
+    },
     "ActivityLog": {
       "title": "Activity Log",
       "description": "A log of administrative activity",
@@ -151,6 +265,10 @@
         "action": { "type": "string", "maxLength": 50 },
         "module": { "type": "string", "maxLength": 50 },
         "targetId": { "type": "string", "maxLength": 128 },
+        "recordType": { "type": "string", "maxLength": 50 },
+        "recordTitle": { "type": "string", "maxLength": 200 },
+        "deletionType": { "type": "string", "maxLength": 50 },
+        "reason": { "type": "string", "maxLength": 500 },
         "details": { "type": "string", "maxLength": 1000 },
         "timestamp": { "type": "string", "format": "date-time" }
       },
@@ -167,6 +285,7 @@
         "contactEmail": { "type": "string", "maxLength": 150 },
         "contactPhone": { "type": "string", "maxLength": 50 },
         "address": { "type": "string", "maxLength": 200 },
+        "trashRetentionDays": { "type": "integer" },
         "socialLinks": {
           "type": "object",
           "properties": {
@@ -181,6 +300,37 @@
           "properties": {
             "defaultTitle": { "type": "string" },
             "defaultDescription": { "type": "string" }
+          }
+        },
+        "heroSlides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "category": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "buttonText": { "type": "string" },
+              "secondaryButtonText": { "type": "string" },
+              "secondaryLink": { "type": "string" },
+              "image": { "type": "string" },
+              "link": { "type": "string" },
+              "status": { "type": "string", "enum": ["published", "draft"] },
+              "order": { "type": "integer" },
+              "publishedAt": { "type": "string" },
+              "featuredType": { "type": "string" },
+              "featuredId": { "type": "string" }
+            }
+          }
+        },
+        "homepage": {
+          "type": "object",
+          "properties": {
+            "sections": { "type": "array", "items": { "type": "object" } },
+            "featuredNewsIds": { "type": "array", "items": { "type": "string" } },
+            "featuredOpportunityIds": { "type": "array", "items": { "type": "string" } },
+            "promoBanners": { "type": "object" }
           }
         }
       }
@@ -199,9 +349,25 @@
       "schema": "WebPage",
       "description": "Collection of static website pages"
     },
+    "categories": {
+      "schema": "Category",
+      "description": "Collection of content categories and subcategories"
+    },
     "media": {
       "schema": "MediaItem",
-      "description": "Collection of media library image assets"
+      "description": "Collection of media library image/video/PDF assets"
+    },
+    "mediaAssets": {
+      "schema": "MediaAsset",
+      "description": "Collection of persistent binary asset manifests"
+    },
+    "mediaAssets/{assetId}/chunks": {
+      "schema": "MediaAssetChunk",
+      "description": "Subcollection of bounded binary chunks for uploaded files"
+    },
+    "mediaAssets/{assetId}/thumbs": {
+      "schema": "MediaAssetThumb",
+      "description": "Subcollection storing optimized thumbnail bytes"
     },
     "users": {
       "schema": "AdminUser",
@@ -218,6 +384,10 @@
     "analytics": {
       "schema": "AnalyticsEvent",
       "description": "Collection of site analytics events"
+    },
+    "savedReports": {
+      "schema": "SavedReport",
+      "description": "Collection of saved report configurations and exports"
     },
     "activityLogs": {
       "schema": "ActivityLog",

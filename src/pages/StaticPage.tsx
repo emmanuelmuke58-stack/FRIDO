@@ -1,5 +1,5 @@
 import React from 'react';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { WebPage } from '../types';
 import { useParams, useLocation, NavLink } from 'react-router-dom';
@@ -66,13 +66,15 @@ export function StaticPage() {
       try {
         const q = query(
           collection(db, 'pages'),
-          where('status', '==', 'published'),
-          where('slug', '==', resolvedSlug),
-          limit(1)
+          where('status', '==', 'published')
         );
         const snap = await getDocs(q);
-        if (!snap.empty) {
-          setPage({ id: snap.docs[0].id, ...snap.docs[0].data() } as WebPage);
+        const matched = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as WebPage))
+          .find(p => (p.slug || '').toLowerCase() === resolvedSlug);
+
+        if (matched) {
+          setPage(matched);
         } else if (DEFAULT_PAGES[resolvedSlug]) {
           setPage({
             id: resolvedSlug,
@@ -114,13 +116,22 @@ export function StaticPage() {
   );
 
   return (
-    <div className="bg-white min-h-screen py-16 md:py-20">
-      <div className="max-w-4xl mx-auto px-6">
-        <p className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-3">{settings.websiteName}</p>
-        <h1 className="text-3xl md:text-5xl font-extrabold text-[#102B4E] font-montserrat mb-10 border-b border-slate-100 pb-8">{page.title}</h1>
+    <div className="bg-white min-h-screen py-8 sm:py-12 md:py-16">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <p className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-2.5">{settings.websiteName}</p>
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#102B4E] mb-6 md:mb-8 border-b border-slate-100 pb-5 md:pb-6 break-words">{page.title}</h1>
+        {page.imageUrl && (
+          <div className="mb-8 rounded-2xl overflow-hidden border border-slate-200/80 aspect-[21/9] bg-slate-100">
+            <img
+              src={page.imageUrl}
+              alt={page.title}
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
         <div
-          className="prose prose-slate lg:prose-xl max-w-none prose-headings:text-[#102B4E] prose-a:text-teal-600"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content) }}
+          className="article-prose max-w-none overflow-x-clip" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content) }}
         />
       </div>
     </div>

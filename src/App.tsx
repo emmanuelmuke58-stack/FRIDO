@@ -17,13 +17,21 @@ import { UserManagement } from './pages/admin/UserManagement';
 import { NewsletterManagement } from './pages/admin/NewsletterManagement';
 import { MediaManagement } from './pages/admin/MediaManagement';
 import { SettingsManagement } from './pages/admin/Settings';
+import { HomepageManagement } from './pages/admin/HomepageManagement';
+import { CategoryManagement } from './pages/admin/CategoryManagement';
+import { TrashManagement } from './pages/admin/TrashManagement';
 import { SearchPage } from './pages/SearchPage';
 import { StaticPage } from './pages/StaticPage';
 import { ContactPage } from './pages/ContactPage';
 
+const routerBasename =
+  typeof window !== 'undefined'&&
+  (window.location.pathname === '/FRIDO'|| window.location.pathname.startsWith('/FRIDO/'))
+    ? '/FRIDO': '/';
+
 export default function App() {
   return (
-    <Router basename={import.meta.env.BASE_URL}>
+    <Router basename={routerBasename}>
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Layout />}>
@@ -65,12 +73,15 @@ export default function App() {
           <Route path="scholarships" element={<OpportunityManagement />} />
           <Route path="tenders" element={<OpportunityManagement />} />
           <Route path="opportunities" element={<OpportunityManagement />} />
+          <Route path="categories" element={<CategoryManagement />} />
           <Route path="pages" element={<PageManagement />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="newsletter" element={<NewsletterManagement />} />
           <Route path="media" element={<MediaManagement />} />
           <Route path="reports" element={<ReportsPage />} />
+          <Route path="trash" element={<TrashManagement />} />
           <Route path="logs" element={<ActivityLogs />} />
+          <Route path="homepage" element={<HomepageManagement />} />
           <Route path="settings" element={<SettingsManagement />} />
           <Route path="*" element={<AdminOverview />} />
         </Route>
@@ -78,7 +89,7 @@ export default function App() {
         {/* Auth Fallback */}
         <Route path="/admin/login" element={<AdminPage />} />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/"replace />} />
       </Routes>
     </Router>
   );

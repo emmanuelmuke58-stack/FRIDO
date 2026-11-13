@@ -1,318 +1,762 @@
 import React from 'react';
 import { useParams, NavLink } from 'react-router-dom';
-import { collection, query, where, getDocs, limit, doc, updateDoc, increment, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, increment, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { NewsItem } from '../types';
-import { Calendar, Clock, ChevronLeft, Share2, ArrowRight, MessageSquare, Maximize2, X as CloseIcon } from 'lucide-react';
+import {
+  Calendar,
+  Clock,
+  ChevronLeft,
+  ArrowRight,
+  MessageSquare,
+  Maximize2,
+  X as CloseIcon,
+  Link2,
+  Check,
+  Printer,
+  ArrowUp,
+  Eye,
+  Briefcase,
+  GraduationCap,
+  FileText,
+} from 'lucide-react';
 import { Facebook, X } from '../components/ui/SocialIcons';
-import { format } from 'date-fns';
 import DOMPurify from 'dompurify';
+import { cn, safeFormatDate } from '../lib/utils';
+import {
+  isNewsPubliclyVisible,
+  calculateReadingTime,
+  PUBLIC_DATA_UPDATED_EVENT,
+} from '../lib/publicData';
+import { STATIC_ASSETS, resolveAssetUrl } from '../lib/assets';
+import { useLanguage } from '../lib/LanguageContext';
+import { useSettings } from '../lib/SettingsContext';
+
+function AuthorAvatar({
+  src,
+  name,
+  className,
+}: {
+  src?: string;
+  name?: string;
+  className: string;
+}) {
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={name || 'Author'}
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className={cn(className, 'object-cover border border-slate-200')}
+      />
+    );
+  }
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        className,
+        'bg-[#083D91] text-white font-bold flex items-center justify-center'
+      )}
+    >
+      {(name || 'R').charAt(0).toUpperCase()}
+    </div>
+  );
+}
 
 export function NewsDetailPage() {
   const { slug } = useParams();
+  const { t } = useLanguage();
+  const { settings } = useSettings();
+
   const [article, setArticle] = React.useState<NewsItem | null>(null);
-  const [related, setRelated] = React.useState<NewsItem[]>([]);
+  const [sidebarItems, setSidebarItems] = React.useState<NewsItem[]>([]);
+  const [sidebarMode, setSidebarMode] = React.useState<'related'| 'latest'>('related');
   const [prevArticle, setPrevArticle] = React.useState<NewsItem | null>(null);
   const [nextArticle, setNextArticle] = React.useState<NewsItem | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [scrollProgress, setScrollProgress] = React.useState(0);
   const [zoomedImage, setZoomedImage] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
 
-  const calculateReadingTime = (text: string) => {
-    const wordsPerMinute = 200;
-    const words = text.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length;
-    return Math.max(1, Math.ceil(words / wordsPerMinute));
-  };
+  const proseContainerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const handleScroll = () => {
       const totalScroll = document.documentElement.scrollTop;
-      const windowHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const windowHeight =
+        document.documentElement.scrollHeight - document.documentElement.clientHeight;
       if (windowHeight > 0) {
-        setScrollProgress((totalScroll / windowHeight) * 100);
+        setScrollProgress(Math.min(100, Math.max(0, (totalScroll / windowHeight) * 100)));
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  React.useEffect(() => {
-    const fetchArticle = async () => {
-      setLoading(true);
-      try {
-        const q = query(
-          collection(db, 'news'),
-          where('status', '==', 'published'),
-          where('slug', '==', slug),
-          limit(1)
+  const fetchArticle = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const now = new Date();
+      const q = query(collection(db, 'news'), where('status', '==', 'published'));
+      const snap = await getDocs(q);
+      const allPublished = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as NewsItem))
+        .filter((n) => isNewsPubliclyVisible(n, now))
+        .sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+
+      const data = allPublished.find((n) => n.slug === slug) || null;
+      if (data) {
+        setArticle(data);
+
+        // Increment views safely
+        updateDoc(doc(db, 'news', data.id), {
+          views: increment(1),
+        }).catch((err) => console.warn('View increment skipped:', err));
+
+        // Log analytics
+        addDoc(collection(db, 'analytics'), {
+          type: 'page_view',
+          path: window.location.pathname,
+          targetId: data.id,
+          category: 'news',
+          timestamp: new Date().toISOString(),
+        }).catch(() => {});
+
+        const sameCategory = allPublished.filter(
+          (n) => n.id !== data.id && (n.category || '').toLowerCase() === (data.category || '').toLowerCase()
         );
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const articleDoc = snap.docs[0];
-          const data = { id: articleDoc.id, ...articleDoc.data() } as NewsItem;
-          setArticle(data);
 
-          // Increment views safely
-          updateDoc(doc(db, 'news', articleDoc.id), {
-            views: increment(1)
-          }).catch(err => console.warn('View increment skipped:', err));
-
-          // Log analytics
-          addDoc(collection(db, 'analytics'), {
-            type: 'page_view',
-            path: window.location.pathname,
-            targetId: articleDoc.id,
-            category: 'news',
-            timestamp: new Date().toISOString()
-          }).catch(() => {});
-
-          // Fetch related & surrounding articles for prev/next navigation
-          const [relSnap, allPublishedSnap] = await Promise.all([
-            getDocs(query(
-              collection(db, 'news'),
-              where('status', '==', 'published'),
-              where('category', '==', data.category),
-              limit(6)
-            )),
-            getDocs(query(
-              collection(db, 'news'),
-              where('status', '==', 'published'),
-              orderBy('publishedAt', 'desc'),
-              limit(30)
-            ))
-          ]);
-
-          setRelated(relSnap.docs.map(d => ({ id: d.id, ...d.data() } as NewsItem)).filter(n => n.id !== data.id));
-
-          const ordered = allPublishedSnap.docs.map(d => ({ id: d.id, ...d.data() } as NewsItem));
-          const idx = ordered.findIndex(n => n.id === data.id);
-          if (idx !== -1) {
-            setNextArticle(idx > 0 ? ordered[idx - 1] : null);
-            setPrevArticle(idx < ordered.length - 1 ? ordered[idx + 1] : null);
-          }
+        if (sameCategory.length > 0) {
+          setSidebarItems(sameCategory.slice(0, 5));
+          setSidebarMode('related');
         } else {
-          setArticle(null);
+          setSidebarItems(allPublished.filter((n) => n.id !== data.id).slice(0, 5));
+          setSidebarMode('latest');
         }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+
+        const idx = allPublished.findIndex((n) => n.id === data.id);
+        if (idx !== -1) {
+          setNextArticle(idx > 0 ? allPublished[idx - 1] : null);
+          setPrevArticle(idx < allPublished.length - 1 ? allPublished[idx + 1] : null);
+        }
+      } else {
+        setArticle(null);
+        setSidebarItems([]);
+        setNextArticle(null);
+        setPrevArticle(null);
       }
-    };
-    fetchArticle();
-    window.scrollTo(0, 0);
+    } catch (e) {
+      console.error('Error loading article:', e);
+    } finally {
+      setLoading(false);
+    }
   }, [slug]);
 
-  const shareUrl = window.location.href;
+  React.useEffect(() => {
+    fetchArticle();
+    window.scrollTo(0, 0);
+  }, [fetchArticle]);
 
-  if (loading) return (
-    <div className="max-w-7xl mx-auto px-4 py-20">
-      <div className="animate-pulse space-y-8">
-        <div className="h-4 bg-slate-100 rounded w-1/4" />
-        <div className="h-12 bg-slate-100 rounded w-3/4" />
-        <div className="h-96 bg-slate-100 rounded-3xl" />
+  React.useEffect(() => {
+    const onUpdate = () => fetchArticle();
+    window.addEventListener(PUBLIC_DATA_UPDATED_EVENT, onUpdate);
+    return () => window.removeEventListener(PUBLIC_DATA_UPDATED_EVENT, onUpdate);
+  }, [fetchArticle]);
+
+  // Dynamic SEO title & meta description per article
+  React.useEffect(() => {
+    if (!article) return;
+    const prevTitle = document.title;
+    const targetTitle = article.seoTitle?.trim() || `${article.headline} | ${settings.websiteName}`;
+    document.title = targetTitle;
+
+    const metaDesc = document.querySelector('meta[name="description"]');
+    const prevDesc = metaDesc?.getAttribute('content') || '';
+    const nextDesc = article.seoDescription?.trim() || article.summary || settings.seo.defaultDescription;
+    if (metaDesc && nextDesc) {
+      metaDesc.setAttribute('content', nextDesc);
+    }
+
+    return () => {
+      document.title = prevTitle;
+      if (metaDesc && prevDesc) {
+        metaDesc.setAttribute('content', prevDesc);
+      }
+    };
+  }, [article, settings.websiteName, settings.seo.defaultDescription]);
+
+  // Ensure inline images inside rich-text body apply no-referrer and never break
+  React.useEffect(() => {
+    if (!proseContainerRef.current || !article) return;
+    const imgs = proseContainerRef.current.querySelectorAll('img');
+    imgs.forEach((img) => {
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.setAttribute('loading', 'lazy');
+      img.onerror = () => {
+        if (img.src !== STATIC_ASSETS.rwandaNewsKagame) {
+          img.src = STATIC_ASSETS.rwandaNewsKagame;
+        }
+      };
+    });
+  }, [article]);
+
+  // Close lightbox on Escape
+  React.useEffect(() => {
+    if (!zoomedImage) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoomedImage(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [zoomedImage]);
+
+  const sanitizedHtml = React.useMemo(() => {
+    if (!article?.content) return '';
+    return DOMPurify.sanitize(article.content, {
+      ADD_TAGS: ['iframe'],
+      ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'],
+    });
+  }, [article?.content]);
+
+  const shareUrl = typeof window !== 'undefined'? window.location.href : '';
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard?.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      // Fallback if clipboard API blocked
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 md:pt-12 pb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 animate-pulse">
+            <div className="lg:col-span-8 space-y-6">
+              <div className="h-3.5 bg-slate-200 rounded w-56"/>
+              <div className="h-4 bg-teal-100 rounded w-36"/>
+              <div className="h-12 bg-slate-200 rounded w-full"/>
+              <div className="h-12 bg-slate-200 rounded w-4/5"/>
+              <div className="h-20 bg-slate-100 rounded-xl w-full"/>
+              <div className="aspect-[16/9] bg-slate-200 rounded-2xl w-full"/>
+              <div className="space-y-3 pt-4">
+                <div className="h-4 bg-slate-100 rounded w-full"/>
+                <div className="h-4 bg-slate-100 rounded w-11/12"/>
+                <div className="h-4 bg-slate-100 rounded w-4/5"/>
+              </div>
+            </div>
+            <div className="lg:col-span-4 space-y-4">
+              <div className="h-80 bg-slate-100 rounded-2xl"/>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (!article) return (
-    <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-      <h2 className="text-3xl font-bold text-slate-900">Article Not Found</h2>
-      <NavLink to="/news" className="bg-[#083D91] text-white px-8 py-3 rounded-xl font-bold mt-8 inline-block">Back to News</NavLink>
-    </div>
-  );
+  if (!article) {
+    return (
+      <div className="bg-[#F8FAFC] min-h-[70vh] flex items-center justify-center px-4 py-16">
+        <div className="max-w-lg w-full bg-white rounded-2xl border border-slate-200/80 p-8 sm:p-10 text-center shadow-xs">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#102B4E] mb-3">
+            {t('news.notFoundTitle')}
+          </h1>
+          <p className="text-sm sm:text-base text-slate-600 mb-6">{t('news.notFoundDesc')}</p>
+          <NavLink
+            to="/news" className="min-h-[44px] inline-flex items-center justify-center gap-2 bg-[#083D91] hover:bg-[#07366D] text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-colors">
+            <ChevronLeft size={16} />
+            <span>{t('news.backToNews')}</span>
+          </NavLink>
+        </div>
+      </div>
+    );
+  }
+
+  const readMins = calculateReadingTime(article.content);
+  const resolvedHeroImg = resolveAssetUrl(article.imageUrl, STATIC_ASSETS.rwandaNewsKagame);
+  const categorySlug = (article.category || 'news').toLowerCase().replace(/\s+/g, '-');
 
   return (
-    <div className="bg-white min-h-screen relative pb-10">
-      {/* Reading Progress Bar */}
-      <div className="fixed top-[64px] md:top-[80px] left-0 w-full h-1 z-50 pointer-events-none">
-        <div className="bg-teal-500 h-full transition-all duration-150" style={{ width: `${scrollProgress}%` }} />
+    <div className="bg-white min-h-screen relative pb-12">
+      {/* Reading Progress Bar aligned strictly below sticky header */}
+      <div
+        aria-hidden="true" className="fixed top-14 md:top-[74px] left-0 w-full h-[3px] z-40 pointer-events-none bg-transparent no-print">
+        <div
+          className="bg-[#14B8A6] h-full transition-all duration-150 ease-out" style={{ width: `${scrollProgress}%` }}
+        />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 pt-8 md:pt-12">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-[11px] md:text-xs font-bold text-slate-400 mb-6 overflow-hidden whitespace-nowrap scrollbar-hide">
-          <NavLink to="/" className="hover:text-teal-600 shrink-0">Home</NavLink>
-          <span className="opacity-30 shrink-0">/</span>
-          <NavLink to="/news" className="hover:text-teal-600 shrink-0">News</NavLink>
-          <span className="opacity-30 shrink-0">/</span>
-          <NavLink to={`/news/category/${article.category.toLowerCase()}`} className="hover:text-teal-600 shrink-0">{article.category}</NavLink>
-          <span className="opacity-30 shrink-0">/</span>
-          <span className="text-slate-900 truncate">{article.headline}</span>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 md:pt-6 lg:pt-10">
+        {/* 1. Breadcrumbs (Desktop Only) */}
+        <nav
+          aria-label="Breadcrumb"
+          className="hidden lg:flex items-center gap-2 text-xs font-semibold text-slate-500 mb-7 overflow-x-auto whitespace-nowrap scrollbar-hide"
+        >
+          <NavLink to="/" className="hover:text-[#083D91] transition-colors shrink-0">
+            {t('nav.home')}
+          </NavLink>
+          <span aria-hidden="true" className="text-slate-300 shrink-0">/</span>
+          <NavLink to="/news" className="hover:text-[#083D91] transition-colors shrink-0">
+            {t('nav.news')}
+          </NavLink>
+          <span aria-hidden="true" className="text-slate-300 shrink-0">/</span>
+          <NavLink
+            to={`/news/category/${categorySlug}`}
+            className="hover:text-[#083D91] transition-colors shrink-0"
+          >
+            {article.category}
+          </NavLink>
+          <span aria-hidden="true" className="text-slate-300 shrink-0">/</span>
+          <span className="text-[#102B4E] font-bold truncate">{article.headline}</span>
         </nav>
 
-        <div className="flex flex-col lg:flex-row gap-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           {/* Main Reading Column */}
-          <article className="w-full lg:w-[70%]">
-            <div className="space-y-6 mb-8 md:mb-12">
-              <span className="inline-block bg-teal-500 text-white text-[10px] font-bold px-3 py-1 rounded-sm uppercase tracking-widest">
-                {article.language === 'Kinyarwanda' ? 'Rwanda News (Kinyarwanda)' : article.category}
-              </span>
-              <h1 className="text-[27px] md:text-5xl lg:text-6xl font-extrabold text-[#102B4E] leading-[1.2] font-montserrat">
+          <article className="lg:col-span-8 min-w-0">
+            {/* Article Header */}
+            <header className="mb-5 md:mb-6 lg:mb-9">
+              {/* Unboxed Category Kicker (Desktop Only) */}
+              <div className="hidden lg:flex flex-wrap items-center gap-2 text-sm font-bold text-[#14B8A6] mb-4">
+                <NavLink
+                  to={`/news/category/${categorySlug}`}
+                  className="hover:text-[#083D91] transition-colors"
+                >
+                  {article.category}
+                </NavLink>
+                <span aria-hidden="true" className="text-slate-300">·</span>
+                <span className="text-slate-500 font-semibold">{article.language}</span>
+                {article.featured && (
+                  <>
+                    <span aria-hidden="true" className="text-slate-300">·</span>
+                    <span className="text-[#083D91] font-bold">{t('news.leadStory')}</span>
+                  </>
+                )}
+              </div>
+
+              {/* Article Headline */}
+              <h1 className="text-[25px] sm:text-[28px] md:text-[32px] lg:text-[42px] font-bold text-[#102B4E] leading-[1.24] md:leading-[1.2] lg:leading-[1.18] tracking-tight break-words text-balance">
                 {article.headline}
               </h1>
+
+              {/* Subtitle / Lead Deck */}
               {article.subtitle && (
-                <p className="text-lg md:text-2xl text-slate-500 leading-relaxed font-inter font-medium italic border-l-4 border-teal-100 pl-4">
+                <p className="mt-2.5 lg:mt-4 text-[15px] sm:text-base md:text-lg lg:text-xl text-slate-600 leading-relaxed font-normal max-w-3xl">
                   {article.subtitle}
                 </p>
               )}
 
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-y border-slate-100 py-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 md:w-12 md:h-12 bg-[#083D91] rounded-full flex items-center justify-center text-white font-bold border-2 border-white shadow-xl flex-shrink-0">
-                    {(article.author || 'A')[0].toUpperCase()}
+              {/* Mobile & Tablet (< lg): Compact Single-Line Author + Date, followed by Share Bar */}
+              <div className="lg:hidden mt-4">
+                <div className="flex items-center justify-between gap-2.5 py-2.5 border-y border-slate-200/80 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <AuthorAvatar
+                      src={article.authorAvatar}
+                      name={article.author}
+                      className="w-7 h-7 rounded-full text-[11px] shrink-0"
+                    />
+                    <span className="text-[13px] font-semibold text-[#102B4E] truncate min-w-0">
+                      {article.author}
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-[#102B4E]">By {article.author}</p>
-                    <div className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                      <span className="flex items-center gap-1"><Calendar size={12} /> {format(new Date(article.publishedAt), 'MMM dd, yyyy')}</span>
-                      <span className="flex items-center gap-1"><Clock size={12} /> {calculateReadingTime(article.content)} min read</span>
+
+                  <div className="flex items-center gap-1.5 text-[12px] text-slate-500 font-medium tabular-nums whitespace-nowrap shrink-0">
+                    <span>{safeFormatDate(article.publishedAt, 'MMM d, yyyy')}</span>
+                    <span aria-hidden="true" className="text-slate-300">·</span>
+                    <span className="sm:hidden">{readMins} min</span>
+                    <span className="hidden sm:inline">{readMins} {t('card.minRead')}</span>
+                  </div>
+                </div>
+
+                {/* Mobile & Tablet Share Row Below Author Line */}
+                <div
+                  className="flex items-center gap-2 pt-3 no-print"
+                  role="group"
+                  aria-label={t('news.share')}
+                >
+                  <a
+                    href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on Facebook"
+                    className="h-10 w-10 rounded-xl bg-[#F1F5F9] hover:bg-[#1877F2] text-[#102B4E] hover:text-white flex items-center justify-center transition-colors shrink-0"
+                  >
+                    <Facebook size={15} />
+                  </a>
+                  <a
+                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(article.headline)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on X"
+                    className="h-10 w-10 rounded-xl bg-[#F1F5F9] hover:bg-black text-[#102B4E] hover:text-white flex items-center justify-center transition-colors shrink-0"
+                  >
+                    <X size={15} />
+                  </a>
+                  <a
+                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`${article.headline} — ${shareUrl}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on WhatsApp"
+                    className="h-10 w-10 rounded-xl bg-[#F1F5F9] hover:bg-[#16A34A] text-[#102B4E] hover:text-white flex items-center justify-center transition-colors shrink-0"
+                  >
+                    <MessageSquare size={15} />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    aria-label={t('news.copyLink')}
+                    className={cn(
+                      'h-10 px-3 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0',
+                      copied
+                        ? 'bg-[#14B8A6] text-white'
+                        : 'bg-[#F1F5F9] hover:bg-[#083D91] text-[#102B4E] hover:text-white'
+                    )}
+                  >
+                    {copied ? <Check size={14} /> : <Link2 size={14} />}
+                    <span>{copied ? t('news.copied') : t('news.copyLink')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    aria-label={t('news.print')}
+                    className="hidden md:inline-flex h-10 w-10 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-[#102B4E] items-center justify-center transition-colors cursor-pointer shrink-0 ml-auto"
+                  >
+                    <Printer size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Desktop (lg+): Preserved Side-by-Side Author Metadata + Share Bar */}
+              <div className="hidden lg:flex items-center justify-between gap-4 border-y border-slate-200/80 py-5 mt-5">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <AuthorAvatar
+                    src={article.authorAvatar}
+                    name={article.author}
+                    className="w-11 h-11 rounded-full text-sm shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[#102B4E] truncate">
+                      {t('news.by')} {article.author}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 font-medium tabular-nums mt-0.5">
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar size={12} className="text-[#14B8A6]" />
+                        {safeFormatDate(article.publishedAt, 'MMM dd, yyyy')}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock size={12} className="text-[#14B8A6]" />
+                        {readMins} {t('card.minRead')}
+                      </span>
+                      {(article.views || 0) > 0 && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="inline-flex items-center gap-1">
+                            <Eye size={12} className="text-slate-400" />
+                            {article.views.toLocaleString()} {t('news.views')}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-2">Share:</span>
-                  <button onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)} className="p-2.5 rounded-full bg-blue-600 text-white hover:scale-110 transition-all shadow-lg shadow-blue-600/20" aria-label="Share on Facebook">
-                    <Facebook size={14} />
+                {/* Desktop Interactive Share Controls */}
+                <div className="flex items-center gap-2 no-print" role="group" aria-label={t('news.share')}>
+                  <a
+                    href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on Facebook"
+                    className="min-h-[42px] min-w-[42px] rounded-xl bg-[#F1F5F9] hover:bg-[#1877F2] text-[#102B4E] hover:text-white flex items-center justify-center transition-colors"
+                  >
+                    <Facebook size={16} />
+                  </a>
+                  <a
+                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(article.headline)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on X"
+                    className="min-h-[42px] min-w-[42px] rounded-xl bg-[#F1F5F9] hover:bg-black text-[#102B4E] hover:text-white flex items-center justify-center transition-colors"
+                  >
+                    <X size={16} />
+                  </a>
+                  <a
+                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`${article.headline} — ${shareUrl}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on WhatsApp"
+                    className="min-h-[42px] min-w-[42px] rounded-xl bg-[#F1F5F9] hover:bg-[#16A34A] text-[#102B4E] hover:text-white flex items-center justify-center transition-colors"
+                  >
+                    <MessageSquare size={16} />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    aria-label={t('news.copyLink')}
+                    className={cn(
+                      'min-h-[42px] px-3 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap',
+                      copied
+                        ? 'bg-[#14B8A6] text-white'
+                        : 'bg-[#F1F5F9] hover:bg-[#083D91] text-[#102B4E] hover:text-white'
+                    )}
+                  >
+                    {copied ? <Check size={15} /> : <Link2 size={15} />}
+                    <span>{copied ? t('news.copied') : t('news.copyLink')}</span>
                   </button>
-                  <button onClick={() => window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}`)} className="p-2.5 rounded-full bg-black text-white hover:scale-110 transition-all shadow-lg shadow-black/20" aria-label="Share on X">
-                    <X size={14} />
-                  </button>
-                  <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareUrl)}`)} className="p-2.5 rounded-full bg-emerald-500 text-white hover:scale-110 transition-all shadow-lg shadow-emerald-500/20" aria-label="Share on WhatsApp">
-                    <MessageSquare size={14} />
-                  </button>
-                  <button onClick={() => { navigator.clipboard.writeText(shareUrl); alert('Link copied!'); }} className="p-2.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all" aria-label="Copy link">
-                    <Share2 size={14} />
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    aria-label={t('news.print')}
+                    className="inline-flex min-h-[42px] min-w-[42px] rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-[#102B4E] items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <Printer size={16} />
                   </button>
                 </div>
               </div>
-            </div>
+            </header>
 
-            {/* Featured Image */}
-            <div className="mb-10 md:mb-12">
-              <div
-                onClick={() => setZoomedImage(article.imageUrl)}
-                className="rounded-2xl md:rounded-[2rem] overflow-hidden shadow-2xl bg-slate-100 aspect-video relative group cursor-zoom-in"
+            {/* Main Featured Image + Caption */}
+            <figure className="mb-6 md:mb-8 lg:mb-10">
+              <button
+                type="button"
+                onClick={() => setZoomedImage(resolvedHeroImg)}
+                className="w-full block rounded-xl md:rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 aspect-[16/9] relative group cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14B8A6]"
+                aria-label="Expand article image"
               >
-                <img src={article.imageUrl} alt={article.headline} className="w-full h-full object-cover" />
-                <div className="absolute bottom-4 right-4 bg-black/60 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                <img
+                  src={resolvedHeroImg}
+                  alt={article.headline}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = STATIC_ASSETS.rwandaNewsKagame;
+                  }}
+                />
+                <span className="absolute bottom-3 right-3 bg-[#102B4E]/80 text-white p-2 rounded-xl opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   <Maximize2 size={16} />
-                </div>
-              </div>
+                </span>
+              </button>
               {article.imageCaption && (
-                <p className="text-center text-[11px] md:text-xs text-slate-400 mt-4 italic font-medium">
+                <figcaption className="text-xs sm:text-sm text-slate-500 mt-2.5 lg:mt-3 text-center leading-relaxed px-2">
                   {article.imageCaption}
-                </p>
+                </figcaption>
               )}
-            </div>
+            </figure>
 
-            {/* Content */}
+            {/* 8. Complete Rich-Text Article Body */}
             <div
-              className="prose prose-slate max-w-none
-                prose-headings:font-montserrat prose-headings:text-[#102B4E] prose-headings:font-extrabold
-                prose-p:text-slate-700 prose-p:text-base md:prose-p:text-lg prose-p:leading-[1.7] md:prose-p:leading-[1.8]
-                prose-a:text-teal-600 prose-a:font-bold prose-a:no-underline hover:prose-a:underline
-                prose-blockquote:border-l-4 prose-blockquote:border-teal-500 prose-blockquote:bg-teal-50/50 prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:rounded-r-xl prose-blockquote:italic prose-blockquote:text-lg md:prose-blockquote:text-xl
-                prose-img:rounded-2xl md:prose-img:rounded-3xl prose-img:shadow-lg"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content) }}
+              ref={proseContainerRef}
+              className="article-prose max-w-[68ch] overflow-x-hidden"
+              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             />
 
-            {/* Previous / Next Article Navigation */}
-            <div className="mt-12 md:mt-20 pt-8 md:pt-10 border-t border-slate-100 flex flex-col sm:flex-row justify-between gap-6 md:gap-8">
-              {prevArticle ? (
-                <NavLink to={`/news/${prevArticle.slug}`} className="flex items-center gap-4 group flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#083D91] group-hover:text-white transition-all shrink-0">
-                    <ChevronLeft size={20} />
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Previous Article</span>
-                    <span className="text-sm font-bold text-[#102B4E] truncate group-hover:text-teal-600 transition-colors">{prevArticle.headline}</span>
-                  </div>
-                </NavLink>
-              ) : (
-                <div className="flex-1" />
-              )}
+            {/* Optional Article Topics / Tags */}
+            {article.tags && article.tags.length > 0 && (
+              <div className="mt-10 pt-6 border-t border-slate-200/80 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                <span className="font-bold text-slate-400 uppercase tracking-wider">
+                  {t('news.topics')}:
+                </span>
+                {article.tags.map((tag) => (
+                  <NavLink
+                    key={tag}
+                    to={`/search?q=${encodeURIComponent(tag)}`}
+                    className="font-semibold text-[#083D91] hover:text-[#14B8A6] transition-colors py-1">
+                    #{tag}
+                  </NavLink>
+                ))}
+              </div>
+            )}
 
-              <div className="hidden sm:block w-px h-10 bg-slate-100" />
+            {/* 9. Previous & Next Article Navigation */}
+            {(prevArticle || nextArticle) && (
+              <nav
+                aria-label="Adjacent articles" className="mt-10 md:mt-14 pt-8 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-4 no-print">
+                {prevArticle ? (
+                  <NavLink
+                    to={`/news/${prevArticle.slug}`}
+                    className="flex items-center gap-3.5 p-4 rounded-2xl bg-[#F8FAFC] border border-slate-200/80 hover:border-[#14B8A6] transition-colors group min-w-0">
+                    <img
+                      src={resolveAssetUrl(prevArticle.imageUrl, STATIC_ASSETS.rwandaNewsKagame)}
+                      alt="" referrerPolicy="no-referrer" className="w-16 h-16 rounded-xl object-cover shrink-0 bg-slate-200" onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = STATIC_ASSETS.rwandaNewsKagame;
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#14B8A6]">
+                        <ChevronLeft size={13} />
+                        {t('news.prevArticle')}
+                      </span>
+                      <p className="text-sm font-bold text-[#102B4E] group-hover:text-[#083D91] line-clamp-2 leading-snug mt-0.5">
+                        {prevArticle.headline}
+                      </p>
+                      <span className="text-[11px] text-slate-400 mt-1 block">
+                        {safeFormatDate(prevArticle.publishedAt, 'MMM dd, yyyy')}
+                      </span>
+                    </div>
+                  </NavLink>
+                ) : (
+                  <div className="hidden sm:block"/>
+                )}
 
-              {nextArticle ? (
-                <NavLink to={`/news/${nextArticle.slug}`} className="flex items-center justify-end gap-4 group flex-1 text-right min-w-0">
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Next Article</span>
-                    <span className="text-sm font-bold text-[#102B4E] truncate group-hover:text-teal-600 transition-colors">{nextArticle.headline}</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#083D91] group-hover:text-white transition-all shrink-0">
-                    <ArrowRight size={20} />
-                  </div>
-                </NavLink>
-              ) : (
-                <div className="flex-1" />
-              )}
-            </div>
+                {nextArticle ? (
+                  <NavLink
+                    to={`/news/${nextArticle.slug}`}
+                    className="flex items-center justify-between gap-3.5 p-4 rounded-2xl bg-[#F8FAFC] border border-slate-200/80 hover:border-[#14B8A6] transition-colors group min-w-0 sm:text-right">
+                    <div className="min-w-0 flex-1 order-2 sm:order-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#14B8A6]">
+                        {t('news.nextArticle')}
+                        <ArrowRight size={13} />
+                      </span>
+                      <p className="text-sm font-bold text-[#102B4E] group-hover:text-[#083D91] line-clamp-2 leading-snug mt-0.5">
+                        {nextArticle.headline}
+                      </p>
+                      <span className="text-[11px] text-slate-400 mt-1 block">
+                        {safeFormatDate(nextArticle.publishedAt, 'MMM dd, yyyy')}
+                      </span>
+                    </div>
+                    <img
+                      src={resolveAssetUrl(nextArticle.imageUrl, STATIC_ASSETS.rwandaNewsKagame)}
+                      alt="" referrerPolicy="no-referrer" className="w-16 h-16 rounded-xl object-cover shrink-0 bg-slate-200 order-1 sm:order-2" onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = STATIC_ASSETS.rwandaNewsKagame;
+                      }}
+                    />
+                  </NavLink>
+                ) : (
+                  <div className="hidden sm:block"/>
+                )}
+              </nav>
+            )}
 
-            <div className="mt-8 flex items-center justify-between">
-              <NavLink to="/news" className="inline-flex items-center gap-2 text-xs font-bold text-[#083D91] hover:text-teal-600 uppercase tracking-widest">
-                <ChevronLeft size={14} /> Back to News
+            <div className="mt-6 pt-4 flex items-center justify-between gap-4 no-print">
+              <NavLink
+                to="/news" className="min-h-[44px] inline-flex items-center gap-1.5 text-sm font-bold text-[#083D91] hover:text-[#14B8A6] transition-colors">
+                <ChevronLeft size={16} />
+                <span>{t('news.backToNews')}</span>
               </NavLink>
-              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="text-[10px] font-bold text-teal-600 uppercase tracking-widest hover:underline">
-                Scroll to Top ↑
+              <button
+                type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth'})}
+                className="min-h-[44px] inline-flex items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-[#083D91] transition-colors cursor-pointer">
+                <span>{t('news.scrollTop')}</span>
+                <ArrowUp size={15} />
               </button>
             </div>
           </article>
 
-          {/* Sidebar */}
-          <aside className="w-full lg:w-[30%] space-y-12">
-            <div className="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-slate-100 shadow-xl shadow-blue-900/5 lg:sticky lg:top-24">
-              <h3 className="text-lg md:text-xl font-extrabold text-[#102B4E] mb-8 font-montserrat">Andi Makuru Ashimishije</h3>
-              <div className="space-y-6 md:space-y-8">
-                {related.map(item => (
-                  <NavLink key={item.id} to={`/news/${item.slug}`} className="flex gap-4 group">
-                    <div className="w-20 h-16 md:w-24 md:h-20 rounded-lg md:rounded-xl overflow-hidden flex-shrink-0 bg-slate-100">
-                      <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-[13px] md:text-sm font-bold text-[#102B4E] leading-tight group-hover:text-teal-600 transition-colors line-clamp-2">
-                        {item.headline}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-2 text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        <Calendar size={10} /> {format(new Date(item.publishedAt), 'MMM dd, yyyy')}
-                      </div>
-                    </div>
-                  </NavLink>
-                ))}
-                {related.length === 0 && (
-                  <p className="text-xs text-slate-400 italic">No related articles yet.</p>
-                )}
+          {/* 10. Editorial Sidebar (Sticky on Desktop, Stacked cleanly on Mobile) */}
+          <aside className="lg:col-span-4 space-y-6 lg:sticky lg:top-24 no-print">
+            {/* Related or Latest News Panel */}
+            <div className="bg-[#F8FAFC] rounded-2xl border border-slate-200/80 p-5 sm:p-6">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200/80">
+                <h2 className="text-lg font-bold text-[#102B4E]">
+                  {sidebarMode === 'related'? t('news.relatedTitle') : t('news.latestTitle')}
+                </h2>
               </div>
-              <NavLink to="/news" className="mt-10 w-full flex items-center justify-between bg-teal-50 text-teal-600 p-5 md:p-6 rounded-2xl group hover:bg-teal-600 hover:text-white transition-all">
-                <div className="flex flex-col">
-                  <span className="text-base md:text-lg font-extrabold font-montserrat leading-tight">Soma amakuru yose</span>
-                  <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest opacity-70">Reba izindi nkuru zose</span>
+
+              {sidebarItems.length > 0 ? (
+                <div className="divide-y divide-slate-200/70">
+                  {sidebarItems.map((item) => (
+                    <NavLink
+                      key={item.id}
+                      to={`/news/${item.slug}`}
+                      className="flex gap-3.5 py-3.5 first:pt-0 last:pb-0 group">
+                      <div className="w-20 h-16 rounded-xl overflow-hidden shrink-0 bg-slate-200">
+                        <img
+                          src={resolveAssetUrl(item.imageUrl, STATIC_ASSETS.rwandaNewsKagame)}
+                          alt={item.headline}
+                          loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = STATIC_ASSETS.rwandaNewsKagame;
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] font-bold text-[#14B8A6] mb-1 truncate">
+                          {item.category} · {safeFormatDate(item.publishedAt, 'MMM dd')}
+                        </div>
+                        <h3 className="text-sm font-bold text-[#102B4E] group-hover:text-[#083D91] transition-colors line-clamp-2 leading-snug">
+                          {item.headline}
+                        </h3>
+                      </div>
+                    </NavLink>
+                  ))}
                 </div>
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-teal-600 text-white flex items-center justify-center group-hover:bg-white group-hover:text-teal-600 transition-all shadow-lg">
-                  <ArrowRight size={18} />
+              ) : (
+                <p className="text-xs text-slate-500 py-2">{t('news.emptyAll')}</p>
+              )}
+
+              <NavLink
+                to="/news" className="mt-5 min-h-[44px] w-full flex items-center justify-between bg-[#083D91] hover:bg-[#07366D] text-white px-4 py-3 rounded-xl transition-colors group">
+                <div className="min-w-0">
+                  <span className="text-sm font-bold block leading-tight">{t('news.readAllTitle')}</span>
+                  <span className="text-[11px] text-white/80 block truncate mt-0.5">
+                    {t('news.readAllDesc')}
+                  </span>
                 </div>
+                <ArrowRight size={18} className="shrink-0 group-hover:translate-x-0.5 transition-transform"/>
               </NavLink>
+            </div>
+
+            {/* Direct Opportunity Discovery Links */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6">
+              <h2 className="text-base font-bold text-[#102B4E] pb-3 mb-3 border-b border-slate-100">
+                {t('nav.opportunities')}
+              </h2>
+              <div className="grid grid-cols-1 gap-2">
+                <NavLink
+                  to="/jobs" className="min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] hover:bg-[#F1F5F9] text-sm font-bold text-[#102B4E] transition-colors">
+                  <span className="inline-flex items-center gap-2.5">
+                    <Briefcase size={16} className="text-[#083D91]"/>
+                    {t('nav.jobs')}
+                  </span>
+                  <ArrowRight size={15} className="text-slate-400"/>
+                </NavLink>
+                <NavLink
+                  to="/scholarships" className="min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] hover:bg-[#F1F5F9] text-sm font-bold text-[#102B4E] transition-colors">
+                  <span className="inline-flex items-center gap-2.5">
+                    <GraduationCap size={16} className="text-[#14B8A6]"/>
+                    {t('nav.scholarships')}
+                  </span>
+                  <ArrowRight size={15} className="text-slate-400"/>
+                </NavLink>
+                <NavLink
+                  to="/tenders" className="min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] hover:bg-[#F1F5F9] text-sm font-bold text-[#102B4E] transition-colors">
+                  <span className="inline-flex items-center gap-2.5">
+                    <FileText size={16} className="text-[#083D91]"/>
+                    {t('nav.tenders')}
+                  </span>
+                  <ArrowRight size={15} className="text-slate-400"/>
+                </NavLink>
+              </div>
             </div>
           </aside>
         </div>
       </div>
 
-      {/* Image Zoom Lightbox */}
+      {/* Accessible Image Zoom Lightbox */}
       {zoomedImage && (
         <div
-          onClick={() => setZoomedImage(null)}
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
-        >
+          role="dialog" aria-modal="true" aria-label="Expanded article image" onClick={() => setZoomedImage(null)}
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out">
           <button
-            onClick={() => setZoomedImage(null)}
-            className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full"
-          >
-            <CloseIcon size={24} />
+            type="button" onClick={() => setZoomedImage(null)}
+            aria-label="Close image preview" className="absolute top-4 right-4 min-h-[44px] min-w-[44px] flex items-center justify-center bg-white/15 hover:bg-white/25 text-white rounded-full transition-colors cursor-pointer">
+            <CloseIcon size={22} />
           </button>
-          <img src={zoomedImage} alt="Zoomed view" className="max-w-full max-h-[90vh] rounded-2xl object-contain" />
+          <img
+            src={zoomedImage}
+            alt={article.headline}
+            referrerPolicy="no-referrer" onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-[88vh] rounded-2xl object-contain cursor-default"/>
         </div>
       )}
     </div>

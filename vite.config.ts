@@ -8,8 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
   return {
-    // GitHub Pages project-site URL: https://<owner>.github.io/FRIDO/
-    base: '/FRIDO/',
+    // Use /FRIDO/ on GitHub Pages builds and / everywhere else (AI Studio preview & local)
+    base: process.env.GITHUB_ACTIONS === 'true' ? '/FRIDO/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
