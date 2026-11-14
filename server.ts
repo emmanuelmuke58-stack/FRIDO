@@ -444,6 +444,28 @@ async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
   const port = process.env.PORT || 3000;
 
+  const allowedOrigins = new Set([
+    'https://emmanuelmuke58-stack.github.io',
+    ...(process.env.FRONTEND_ORIGIN || '').split(',').map((origin) => origin.trim()).filter(Boolean),
+  ]);
+  app.use((req: Request, res: ExpressResponse, next: NextFunction) => {
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+  app.get('/api/health', (_req: Request, res: ExpressResponse) => {
+    res.json({ status: 'ok', service: 'frido-api' });
+  });
+
 
   // OpenAI-powered FRIDO assistant. The API key is read only on the server.
   app.use(express.json({ limit: '48kb' }));
