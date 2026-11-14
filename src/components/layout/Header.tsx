@@ -240,6 +240,7 @@ export function Navbar() {
         matchPrefix: '/opportunities',
         subLinks: mergeDynamicSubLinks(DEFAULT_SUBLINKS.Opportunities, dbCategories, 'Others', '/opportunities'),
       },
+      { key: 'ai', name: 'AI Assistant', path: '/ai', matchPrefix: '/ai'},
       { key: 'about', name: t('nav.about'), path: '/about', matchPrefix: '/about'},
     ],
     [dbCategories, t]
