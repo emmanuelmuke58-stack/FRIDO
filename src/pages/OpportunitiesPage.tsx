@@ -3,7 +3,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { Opportunity } from '@/src/types';
 import { MapPin, Clock, ArrowRight, Briefcase, GraduationCap, ClipboardList, Star } from 'lucide-react';
-import { NavLink, useLocation, useParams } from 'react-router-dom';
+import { NavLink, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { cn, safeFormatDate } from '@/src/lib/utils';
 import { isOpportunityExpired } from '@/src/lib/publicData';
@@ -55,6 +55,8 @@ export function OpportunitiesListingPage() {
   const [loading, setLoading] = React.useState(true);
   const location = useLocation();
   const { subCategory } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const orgParam = (searchParams.get('org') || '').trim();
 
   const baseSegment = React.useMemo(() => {
     const first = location.pathname.split('/').filter(Boolean)[0] || 'opportunities';
@@ -91,7 +93,12 @@ export function OpportunitiesListingPage() {
           );
         }
 
-        items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        if (orgParam) {
+          const targetOrg = orgParam.toLowerCase();
+          items = items.filter(o => (o.organization || '').trim().toLowerCase() === targetOrg);
+        }
+
+        items.sort((a, b) => (b.publishedAt || b.createdAt || '').localeCompare(a.publishedAt || a.createdAt || ''));
         setOpps(items);
       } catch (e) {
         console.error(e);
@@ -100,7 +107,7 @@ export function OpportunitiesListingPage() {
       }
     };
     fetchOpps();
-  }, [filterCategory, subCategory]);
+  }, [filterCategory, subCategory, orgParam]);
 
   const subFilters = SUBCATEGORY_FILTERS[baseSegment] || SUBCATEGORY_FILTERS.Opportunities;
   const basePath = `/${baseSegment.toLowerCase()}`;
@@ -147,6 +154,25 @@ export function OpportunitiesListingPage() {
             );
           })}
         </div>
+
+        {orgParam && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm">
+            <span className="text-slate-600">
+              Showing opportunities from <strong className="text-[#102B4E]">{orgParam}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete('org');
+                setSearchParams(next);
+              }}
+              className="text-xs font-bold text-[#083D91] hover:underline cursor-pointer"
+            >
+              Show all employers
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-4 md:gap-6">
           {opps.map((opp, idx) => {

@@ -27,6 +27,7 @@ export interface NewsItem extends SoftDeleteMetadata {
   tags?: string[];
   seoTitle?: string;
   seoDescription?: string;
+  relatedArticleIds?: string[];
 }
 
 export interface Opportunity extends SoftDeleteMetadata {
@@ -39,23 +40,32 @@ export interface Opportunity extends SoftDeleteMetadata {
   galleryImages?: string[];
   location: string;
   deadline: string;
+  publishedAt?: string;
   category: 'Jobs'| 'Scholarships'| 'Tenders'| 'Others';
   subCategory?: string; // e.g., 'Government', 'NGO', 'Undergraduate'
   type: string; // e.g., 'Full-time', 'Contract'
+  experienceRequired?: string;
+  educationRequired?: string;
   salary?: string;
+  summary?: string; // Short introduction / excerpt
   description: string; // Rich text
   responsibilities?: string; // Rich text
   qualifications?: string; // Rich text
   requirements?: string; // Rich text
+  skills?: string; // Rich text
   benefits?: string; // Rich text
   applicationInstructions?: string; // Rich text
   applyUrl: string;
+  applyEmail?: string;
   status: 'active'| 'draft'| 'expired'| 'deleted';
   views: number;
   clicks: number;
   createdAt: string;
   featured: boolean;
   authorId?: string;
+  relatedOpportunityIds?: string[];
+  seoTitle?: string;
+  seoDescription?: string;
 
   // Specific to Scholarships
   institution?: string;
@@ -219,3 +229,21 @@ export interface HomepageConfig {
   };
 }
 
+export interface ArticleAdBanner {
+  id: string;
+  title: string;
+  imageUrl: string;
+  linkUrl: string;
+  label?: string;
+  enabled: boolean;
+  order: number;
+}
+
+export interface ArticleComment {
+  id: string;
+  articleId: string;
+  authorName: string;
+  content: string;
+  status: 'approved' | 'hidden';
+  createdAt: string;
+}

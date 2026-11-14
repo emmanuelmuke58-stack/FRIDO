@@ -44,6 +44,7 @@ export function NewsManagement() {
   const [permDeleteTarget, setPermDeleteTarget] = React.useState<NewsItem | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
   const [feedback, setFeedback] = React.useState<FeedbackState | null>(null);
+  const [relatedSearch, setRelatedSearch] = React.useState('');
 
   const allowPermanent = canPermanentDelete(userProfile);
   const allowRestore = canRestoreContent(userProfile);
@@ -91,9 +92,15 @@ export function NewsManagement() {
       const resolvedAuthorId = rest.authorId || auth.currentUser?.uid || null;
 
       const resolvedAuthorAvatar =
-        resolvedAuthorId === auth.currentUser?.uid
-          ? userProfile?.avatarUrl || auth.currentUser?.photoURL || rest.authorAvatar || ''
-          : rest.authorAvatar || '';
+        rest.authorAvatar !== undefined
+          ? rest.authorAvatar
+          : resolvedAuthorId === auth.currentUser?.uid
+            ? userProfile?.avatarUrl || auth.currentUser?.photoURL || ''
+            : '';
+
+      const relatedArticleIds = Array.from(new Set(rest.relatedArticleIds || []))
+        .filter((rid): rid is string => typeof rid === 'string' && rid.trim().length > 0 && rid !== id)
+        .slice(0, 10);
 
       const data = stripUndefined({
         ...rest,
@@ -111,6 +118,7 @@ export function NewsManagement() {
         views: Math.max(0, Math.floor(Number(rest.views) || 0)),
         featured: Boolean(rest.featured),
         imageUrl: (rest.imageUrl ?? '').slice(0, 2000),
+        relatedArticleIds,
       });
 
       if (id) {
@@ -441,13 +449,15 @@ export function NewsManagement() {
 
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6">
               <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <Globe size={18} className="text-teal-500"/> Metadata
+                <Globe size={18} className="text-teal-500"/> Introduction & Metadata
               </h3>
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Short Summary</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Article Introduction / Excerpt
+                  </label>
                   <textarea
-                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-lg text-sm h-28 resize-none" placeholder="Brief excerpt for listings..." value={currentArticle.summary || ''}
+                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-lg text-sm h-28 resize-none" placeholder="Brief introduction displayed beside featured image..." value={currentArticle.summary || ''}
                     onChange={e => setCurrentArticle({ ...currentArticle, summary: e.target.value })}
                   />
                 </div>
@@ -475,6 +485,84 @@ export function NewsManagement() {
                     <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", currentArticle.featured ? "left-7": "left-1")} />
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <User size={18} className="text-teal-500"/> Author Information
+              </h3>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Author Name</label>
+                  <input
+                    type="text"
+                    placeholder={userProfile?.displayName || auth.currentUser?.displayName || 'Editorial Team'}
+                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-lg text-sm"
+                    value={currentArticle.author || ''}
+                    onChange={e => setCurrentArticle({ ...currentArticle, author: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Author Profile Photo</label>
+                  <ImageUploadField
+                    value={currentArticle.authorAvatar || ''}
+                    kind="avatar"
+                    aspectHint="1:1"
+                    onChange={(url) => setCurrentArticle({ ...currentArticle, authorAvatar: url })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-bold text-slate-900 text-sm">Related Articles</h3>
+                <span className="text-[11px] font-bold text-slate-400">
+                  {(currentArticle.relatedArticleIds || []).length}/6 selected
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Optional: Select specific articles to prioritize in the Related Articles section.
+              </p>
+              <input
+                type="search"
+                placeholder="Search articles to link..."
+                value={relatedSearch}
+                onChange={e => setRelatedSearch(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs"
+              />
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                {activeNews
+                  .filter(a => a.id !== currentArticle.id && (!relatedSearch.trim() || a.headline.toLowerCase().includes(relatedSearch.trim().toLowerCase())))
+                  .slice(0, 30)
+                  .map(candidate => {
+                    const selectedList = currentArticle.relatedArticleIds || [];
+                    const isChecked = selectedList.includes(candidate.id);
+                    return (
+                      <label
+                        key={candidate.id}
+                        className={cn(
+                          "flex items-start gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-colors",
+                          isChecked ? "bg-teal-50/70 border-teal-200 text-[#102B4E]" : "bg-slate-50/60 border-slate-100 text-slate-600 hover:bg-slate-100/70"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={!isChecked && selectedList.length >= 6}
+                          onChange={() => {
+                            const next = isChecked
+                              ? selectedList.filter(rid => rid !== candidate.id)
+                              : [...selectedList, candidate.id].slice(0, 6);
+                            setCurrentArticle({ ...currentArticle, relatedArticleIds: next });
+                          }}
+                          className="mt-0.5 rounded border-slate-300 text-[#083D91]"
+                        />
+                        <span className="line-clamp-2 font-medium leading-snug">{candidate.headline}</span>
+                      </label>
+                    );
+                  })}
               </div>
             </div>
           </div>

@@ -142,7 +142,7 @@ service cloud.firestore {
              data.keys().hasOnly([
                'headline', 'subtitle', 'slug', 'summary', 'content', 'imageUrl', 'imageCaption',
                'publishedAt', 'category', 'language', 'status', 'author', 'authorId', 'authorAvatar', 'featured',
-               'views', 'tags', 'seoTitle', 'seoDescription',
+               'views', 'tags', 'seoTitle', 'seoDescription', 'relatedArticleIds',
                'deletedAt', 'deletedBy', 'deletedByName', 'previousStatus', 'deleteReason'
              ]) &&
              data.headline is string && data.headline.size() > 0 && data.headline.size() <= 200 &&
@@ -164,6 +164,7 @@ service cloud.firestore {
              (!('tags' in data) || data.tags == null || (data.tags is list && data.tags.size() <= 15 && (data.tags.size() == 0 || data.tags[0] is string))) &&
              (!('seoTitle' in data) || data.seoTitle == null || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
              (!('seoDescription' in data) || data.seoDescription == null || (data.seoDescription is string && data.seoDescription.size() <= 250)) &&
+             (!('relatedArticleIds' in data) || data.relatedArticleIds == null || (data.relatedArticleIds is list && data.relatedArticleIds.size() <= 10 && (data.relatedArticleIds.size() == 0 || data.relatedArticleIds[0] is string))) &&
              (!('deletedAt' in data) || data.deletedAt == null || (data.deletedAt is string && data.deletedAt.size() <= 64)) &&
              (!('deletedBy' in data) || data.deletedBy == null || (data.deletedBy is string && data.deletedBy.size() <= 128)) &&
              (!('deletedByName' in data) || data.deletedByName == null || (data.deletedByName is string && data.deletedByName.size() <= 150)) &&
@@ -188,9 +189,11 @@ service cloud.firestore {
       return data.keys().hasAll(['title', 'slug', 'organization', 'deadline', 'category', 'description', 'status']) &&
              data.keys().hasOnly([
                'title', 'slug', 'organization', 'organizationLogo', 'coverImageUrl', 'galleryImages',
-               'location', 'deadline', 'category', 'subCategory', 'type', 'salary', 'description', 'responsibilities',
-               'qualifications', 'requirements', 'benefits', 'applicationInstructions', 'applyUrl',
-               'status', 'views', 'clicks', 'createdAt', 'featured', 'authorId', 'institution',
+               'location', 'deadline', 'publishedAt', 'category', 'subCategory', 'type',
+               'experienceRequired', 'educationRequired', 'salary', 'summary', 'description', 'responsibilities',
+               'qualifications', 'requirements', 'skills', 'benefits', 'applicationInstructions', 'applyUrl', 'applyEmail',
+               'status', 'views', 'clicks', 'createdAt', 'featured', 'authorId', 'relatedOpportunityIds',
+               'seoTitle', 'seoDescription', 'institution',
                'country', 'scholarshipType', 'requiredDocuments', 'tenderRef', 'issuingOrg',
                'submissionInstructions', 'downloadUrl', 'contactInfo',
                'deletedAt', 'deletedBy', 'deletedByName', 'previousStatus', 'deleteReason'
@@ -199,6 +202,7 @@ service cloud.firestore {
              data.slug is string && data.slug.size() > 0 && data.slug.size() <= 200 && data.slug.matches('^[a-z0-9-]+$') &&
              data.organization is string && data.organization.size() > 0 && data.organization.size() <= 200 &&
              data.deadline is string && data.deadline.size() <= 64 &&
+             (!('publishedAt' in data) || data.publishedAt == null || (data.publishedAt is string && data.publishedAt.size() <= 64)) &&
              data.category in ['Jobs', 'Scholarships', 'Tenders', 'Others'] &&
              data.description is string && data.description.size() <= 100000 &&
              data.status in ['active', 'draft', 'expired', 'deleted'] &&
@@ -206,12 +210,33 @@ service cloud.firestore {
              (!('location' in data) || data.location == null || (data.location is string && data.location.size() <= 200)) &&
              (!('subCategory' in data) || data.subCategory == null || (data.subCategory is string && data.subCategory.size() <= 100)) &&
              (!('type' in data) || data.type == null || (data.type is string && data.type.size() <= 100)) &&
+             (!('experienceRequired' in data) || data.experienceRequired == null || (data.experienceRequired is string && data.experienceRequired.size() <= 200)) &&
+             (!('educationRequired' in data) || data.educationRequired == null || (data.educationRequired is string && data.educationRequired.size() <= 300)) &&
              (!('salary' in data) || data.salary == null || (data.salary is string && data.salary.size() <= 100)) &&
+             (!('summary' in data) || data.summary == null || (data.summary is string && data.summary.size() <= 1000)) &&
+             (!('responsibilities' in data) || data.responsibilities == null || (data.responsibilities is string && data.responsibilities.size() <= 50000)) &&
+             (!('qualifications' in data) || data.qualifications == null || (data.qualifications is string && data.qualifications.size() <= 50000)) &&
+             (!('requirements' in data) || data.requirements == null || (data.requirements is string && data.requirements.size() <= 50000)) &&
+             (!('skills' in data) || data.skills == null || (data.skills is string && data.skills.size() <= 50000)) &&
+             (!('benefits' in data) || data.benefits == null || (data.benefits is string && data.benefits.size() <= 50000)) &&
+             (!('applicationInstructions' in data) || data.applicationInstructions == null || (data.applicationInstructions is string && data.applicationInstructions.size() <= 50000)) &&
              (!('applyUrl' in data) || data.applyUrl == null || (data.applyUrl is string && data.applyUrl.size() <= 2000)) &&
+             (!('applyEmail' in data) || data.applyEmail == null || (data.applyEmail is string && data.applyEmail.size() <= 150)) &&
              (!('downloadUrl' in data) || data.downloadUrl == null || (data.downloadUrl is string && data.downloadUrl.size() <= 2000)) &&
              (!('organizationLogo' in data) || data.organizationLogo == null || (data.organizationLogo is string && data.organizationLogo.size() <= 2000)) &&
              (!('coverImageUrl' in data) || data.coverImageUrl == null || (data.coverImageUrl is string && data.coverImageUrl.size() <= 2000)) &&
              (!('galleryImages' in data) || data.galleryImages == null || isValidUrlList(data.galleryImages)) &&
+             (!('relatedOpportunityIds' in data) || data.relatedOpportunityIds == null || (data.relatedOpportunityIds is list && data.relatedOpportunityIds.size() <= 10 && (data.relatedOpportunityIds.size() == 0 || data.relatedOpportunityIds[0] is string))) &&
+             (!('seoTitle' in data) || data.seoTitle == null || (data.seoTitle is string && data.seoTitle.size() <= 120)) &&
+             (!('seoDescription' in data) || data.seoDescription == null || (data.seoDescription is string && data.seoDescription.size() <= 250)) &&
+             (!('institution' in data) || data.institution == null || (data.institution is string && data.institution.size() <= 200)) &&
+             (!('country' in data) || data.country == null || (data.country is string && data.country.size() <= 100)) &&
+             (!('scholarshipType' in data) || data.scholarshipType == null || (data.scholarshipType is string && data.scholarshipType.size() <= 100)) &&
+             (!('requiredDocuments' in data) || data.requiredDocuments == null || (data.requiredDocuments is string && data.requiredDocuments.size() <= 20000)) &&
+             (!('tenderRef' in data) || data.tenderRef == null || (data.tenderRef is string && data.tenderRef.size() <= 100)) &&
+             (!('issuingOrg' in data) || data.issuingOrg == null || (data.issuingOrg is string && data.issuingOrg.size() <= 200)) &&
+             (!('submissionInstructions' in data) || data.submissionInstructions == null || (data.submissionInstructions is string && data.submissionInstructions.size() <= 20000)) &&
+             (!('contactInfo' in data) || data.contactInfo == null || (data.contactInfo is string && data.contactInfo.size() <= 500)) &&
              (!('views' in data) || (data.views is int && data.views >= 0)) &&
              (!('clicks' in data) || (data.clicks is int && data.clicks >= 0)) &&
              (!('featured' in data) || data.featured is bool) &&
@@ -625,6 +650,25 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow update: if false;
       allow delete: if isSuperAdmin() && isValidId(logId);
+    }
+
+    // Comments (Reader comments on news articles)
+    function isValidComment(data) {
+      return data.keys().hasAll(['articleId', 'authorName', 'content', 'status', 'createdAt']) &&
+             data.keys().hasOnly(['articleId', 'authorName', 'content', 'status', 'createdAt']) &&
+             isValidId(data.articleId) &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+             data.content is string && data.content.size() >= 2 && data.content.size() <= 2000 &&
+             data.status in ['approved', 'hidden'] &&
+             data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 64;
+    }
+
+    match /comments/{commentId} {
+      allow get: if isValidId(commentId) && (existing().status == 'approved' || isAdmin());
+      allow list: if resource.data.status == 'approved' || isAdmin();
+      allow create: if isValidId(commentId) && isValidComment(incoming()) && incoming().status == 'approved';
+      allow update: if isAdmin() && isValidId(commentId) && isValidComment(incoming());
+      allow delete: if isAdmin() && isValidId(commentId);
     }
 
     // Settings

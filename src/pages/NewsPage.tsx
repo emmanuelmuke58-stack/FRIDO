@@ -53,6 +53,7 @@ export function NewsListingPage() {
   const { language, t } = useLanguage();
 
   const langParam = searchParams.get('lang') || '';
+  const authorParam = (searchParams.get('author') || '').trim();
   const initialQuery = searchParams.get('q') || '';
 
   const [allNews, setAllNews] = React.useState<NewsItem[]>([]);
@@ -94,10 +95,10 @@ export function NewsListingPage() {
     setSearchTerm(searchParams.get('q') || '');
   }, [searchParams]);
 
-  // Always reset to page 1 whenever filters, search, language, or sort change
+  // Always reset to page 1 whenever filters, search, language, author, or sort change
   React.useEffect(() => {
     setPage(1);
-  }, [category, langParam, searchTerm, sortBy]);
+  }, [category, langParam, authorParam, searchTerm, sortBy]);
 
   const categoryFilters = React.useMemo(() => {
     const items: { slug: string; label: string; path: string; aliases: string[] }[] =
@@ -195,6 +196,11 @@ export function NewsListingPage() {
       );
     }
 
+    if (authorParam) {
+      const targetAuthor = authorParam.toLowerCase();
+      items = items.filter((n) => (n.author || '').trim().toLowerCase() === targetAuthor);
+    }
+
     const q = searchTerm.trim().toLowerCase();
     if (q) {
       items = items.filter((n) => {
@@ -220,7 +226,7 @@ export function NewsListingPage() {
     }
 
     return items;
-  }, [allNews, activeCategoryObj, activeLanguage, searchTerm, sortBy]);
+  }, [allNews, activeCategoryObj, activeLanguage, authorParam, searchTerm, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filteredNews.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -272,11 +278,13 @@ export function NewsListingPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const pageHeading = activeCategoryObj
-    ? `${activeCategoryObj.label} ${t('nav.news')}`
-    : activeLanguage !== 'All'
-      ? `${t('news.title')} (${activeLanguage})`
-      : t('news.title');
+  const pageHeading = authorParam
+    ? `${authorParam} — ${t('nav.news')}`
+    : activeCategoryObj
+      ? `${activeCategoryObj.label} ${t('nav.news')}`
+      : activeLanguage !== 'All'
+        ? `${t('news.title')} (${activeLanguage})`
+        : t('news.title');
 
   return (
     <div className="bg-[#F8FAFC] min-h-screen py-6 md:py-10">
@@ -452,6 +460,26 @@ export function NewsListingPage() {
               );
             })}
           </div>
+
+          {authorParam && (
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs sm:text-sm">
+              <span className="text-slate-600">
+                Author: <strong className="text-[#102B4E]">{authorParam}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.delete('author');
+                  setSearchParams(next);
+                }}
+                className="inline-flex items-center gap-1 text-xs font-bold text-[#083D91] hover:text-[#14B8A6] cursor-pointer"
+              >
+                <X size={14} />
+                <span>Show all authors</span>
+              </button>
+            </div>
+          )}
         </section>
 
         {/* Loading Skeleton Grid (matches responsive 1/2/3/4/5 column layout) */}

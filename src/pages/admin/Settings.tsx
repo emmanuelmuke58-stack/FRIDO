@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useSettings, WebsiteSettings } from '../../lib/SettingsContext';
-import { Save, Globe, Phone, Mail, MapPin, Layout, Share2, Plus, Trash2, Clock } from 'lucide-react';
+import { Save, Globe, Phone, Mail, MapPin, Layout, Share2, Plus, Trash2, Clock, Megaphone, ArrowUp, ArrowDown } from 'lucide-react';
 import { logActivity } from '../../lib/services';
 import { cn } from '../../lib/utils';
 import { ImageUploadField } from '../../components/admin/ImageUploadField';
 import { DeleteConfirmModal } from '../../components/admin/DeleteConfirmModal';
 import { ActionFeedbackBanner, FeedbackState } from '../../components/admin/BulkActionBar';
 import { STATIC_ASSETS } from '../../lib/assets';
+import { ArticleAdBanner } from '../../types';
 
 export function SettingsManagement() {
   const { settings, updateSettings } = useSettings();
   const [formData, setFormData] = useState<WebsiteSettings>(settings);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general'| 'hero'| 'social'| 'seo'| 'retention'>('general');
+  const [activeTab, setActiveTab] = useState<'general'| 'hero'| 'ads'| 'social'| 'seo'| 'retention'>('general');
   const [deleteSlideIdx, setDeleteSlideIdx] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
@@ -62,6 +63,44 @@ export function SettingsManagement() {
     setFormData({ ...formData, heroSlides: newSlides });
   };
 
+  const sidebarAds: ArticleAdBanner[] = formData.articleSidebarAds || [];
+
+  const addAdBanner = () => {
+    const nextAd: ArticleAdBanner = {
+      id: `ad-${Date.now()}`,
+      title: 'Sponsored Banner',
+      imageUrl: STATIC_ASSETS.rwandaEducationBanner,
+      linkUrl: '/contact',
+      label: 'Kwamamaza',
+      enabled: true,
+      order: sidebarAds.length + 1,
+    };
+    setFormData({ ...formData, articleSidebarAds: [...sidebarAds, nextAd] });
+  };
+
+  const updateAdBanner = (idx: number, patch: Partial<ArticleAdBanner>) => {
+    const updated = [...sidebarAds];
+    updated[idx] = { ...updated[idx], ...patch };
+    setFormData({ ...formData, articleSidebarAds: updated });
+  };
+
+  const removeAdBanner = (idx: number) => {
+    const updated = sidebarAds.filter((_, i) => i !== idx).map((ad, i) => ({ ...ad, order: i + 1 }));
+    setFormData({ ...formData, articleSidebarAds: updated });
+  };
+
+  const moveAdBanner = (idx: number, direction: -1 | 1) => {
+    const target = idx + direction;
+    if (target < 0 || target >= sidebarAds.length) return;
+    const copy = [...sidebarAds];
+    const [moved] = copy.splice(idx, 1);
+    copy.splice(target, 0, moved);
+    setFormData({
+      ...formData,
+      articleSidebarAds: copy.map((ad, i) => ({ ...ad, order: i + 1 })),
+    });
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -85,6 +124,7 @@ export function SettingsManagement() {
           {[
             { id: 'general', label: 'General Info', icon: Globe },
             { id: 'hero', label: 'Hero Slides', icon: Layout },
+            { id: 'ads', label: 'Article Ads', icon: Megaphone },
             { id: 'social', label: 'Social Media', icon: Share2 },
             { id: 'seo', label: 'SEO Settings', icon: Globe },
             { id: 'retention', label: 'Trash & Retention', icon: Clock },
@@ -208,6 +248,132 @@ export function SettingsManagement() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'ads' && (
+            <div className="space-y-6">
+              <div className="flex flex-wrap justify-between items-center gap-3">
+                <div>
+                  <h3 className="text-xl font-bold text-[#102B4E]">Sidebar Advertising Banners</h3>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                    Upload vertical banners displayed in the right advertising column on single news article and job/opportunity pages. Click &ldquo;Save Changes&rdquo; after editing.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addAdBanner}
+                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#083D91] hover:bg-[#07366D] text-white text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors"
+                >
+                  <Plus size={16} /> Add Ad Banner
+                </button>
+              </div>
+
+              {sidebarAds.length === 0 ? (
+                <div className="bg-white p-10 rounded-3xl border border-slate-100 text-center text-slate-400 text-sm">
+                  No advertising banners configured. Click &ldquo;Add Ad Banner&rdquo; to upload one.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sidebarAds.map((ad, idx) => (
+                    <div key={ad.id} className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="bg-slate-100 px-3 py-1 rounded-lg text-xs font-bold text-slate-600">
+                            Banner #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateAdBanner(idx, { enabled: !ad.enabled })}
+                            className={cn(
+                              'px-3 py-1 rounded-lg text-xs font-bold transition-colors',
+                              ad.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                            )}
+                          >
+                            {ad.enabled ? 'Active' : 'Paused'}
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => moveAdBanner(idx, -1)}
+                            disabled={idx === 0}
+                            aria-label="Move banner up"
+                            className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveAdBanner(idx, 1)}
+                            disabled={idx === sidebarAds.length - 1}
+                            aria-label="Move banner down"
+                            className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeAdBanner(idx)}
+                            className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold inline-flex items-center gap-1"
+                          >
+                            <Trash2 size={14} /> Remove
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <ImageUploadField
+                          label="Advertisement Image (Vertical Recommended)"
+                          value={ad.imageUrl}
+                          onChange={(url) => updateAdBanner(idx, { imageUrl: url })}
+                          aspectHint="free"
+                          enableCrop={false}
+                          helperText="Original aspect ratio is preserved automatically in the article sidebar."
+                        />
+                        <div className="space-y-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                              Ad Title / Alt Text
+                            </label>
+                            <input
+                              type="text"
+                              value={ad.title}
+                              onChange={(e) => updateAdBanner(idx, { title: e.target.value })}
+                              placeholder="Sponsor name or campaign title"
+                              className="w-full min-h-[42px] p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                              Destination Link URL
+                            </label>
+                            <input
+                              type="text"
+                              value={ad.linkUrl}
+                              onChange={(e) => updateAdBanner(idx, { linkUrl: e.target.value })}
+                              placeholder="https://example.com or /contact"
+                              className="w-full min-h-[42px] p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                              Top Label
+                            </label>
+                            <input
+                              type="text"
+                              value={ad.label ?? 'Kwamamaza'}
+                              onChange={(e) => updateAdBanner(idx, { label: e.target.value })}
+                              placeholder="Kwamamaza or Advertisement"
+                              className="w-full min-h-[42px] p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

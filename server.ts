@@ -977,10 +977,19 @@ async function startServer() {
             next();
             return;
           }
-          const patched = transformed.code.replace(
-            'transport.connect(createHMRHandler(handleMessage));',
-            '/* HMR WebSocket disabled via DISABLE_HMR=true */'
-          );
+          const patched = transformed.code
+            .replace(
+              'transport.connect(createHMRHandler(handleMessage));',
+              '/* HMR WebSocket disabled via DISABLE_HMR=true */'
+            )
+            .replace(
+              'else throw new SendBeforeConnectError("send was called before connect");',
+              'else return;'
+            )
+            .replace(
+              'else throw new SendBeforeConnectError("invoke was called before connect");',
+              'else return;'
+            );
           res.status(200).set({ 'Content-Type': 'application/javascript; charset=utf-8' }).end(patched);
         } catch (err) {
           next(err);

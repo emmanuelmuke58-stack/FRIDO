@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { STATIC_ASSETS, resolveAssetUrl } from './assets';
-import { HeroSlide, HomepageConfig, HomepageSectionConfig } from '../types';
+import { ArticleAdBanner, HeroSlide, HomepageConfig, HomepageSectionConfig } from '../types';
 import { invalidatePublicCache } from './publicData';
 
 export interface WebsiteSettings {
@@ -25,6 +25,7 @@ export interface WebsiteSettings {
   };
   heroSlides: HeroSlide[];
   homepage: HomepageConfig;
+  articleSidebarAds?: ArticleAdBanner[];
 }
 
 export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
@@ -178,6 +179,26 @@ export const DEFAULT_SETTINGS: WebsiteSettings = {
       },
     },
   },
+  articleSidebarAds: [
+    {
+      id: 'ad-slot-1',
+      title: 'Advertise With Rwanda Opportunities',
+      imageUrl: STATIC_ASSETS.rwandaEducationBanner,
+      linkUrl: '/contact',
+      label: 'Kwamamaza',
+      enabled: true,
+      order: 1,
+    },
+    {
+      id: 'ad-slot-2',
+      title: 'Explore Active Tenders & Opportunities',
+      imageUrl: STATIC_ASSETS.rwandaInfrastructure,
+      linkUrl: '/opportunities',
+      label: 'Kwamamaza',
+      enabled: true,
+      order: 2,
+    },
+  ],
 };
 
 const SettingsContext = createContext<{
@@ -259,6 +280,19 @@ function normalizeSettings(raw: Partial<WebsiteSettings>): WebsiteSettings {
         },
       },
     },
+    articleSidebarAds: Array.isArray(raw.articleSidebarAds)
+      ? raw.articleSidebarAds
+          .map((ad, idx) => ({
+            id: ad.id || `ad-${idx + 1}`,
+            title: ad.title || `Advertisement ${idx + 1}`,
+            imageUrl: resolveAssetUrl(ad.imageUrl, STATIC_ASSETS.rwandaEducationBanner),
+            linkUrl: ad.linkUrl || '/contact',
+            label: ad.label ?? 'Kwamamaza',
+            enabled: ad.enabled !== false,
+            order: typeof ad.order === 'number' ? ad.order : idx + 1,
+          }))
+          .sort((a, b) => a.order - b.order)
+      : DEFAULT_SETTINGS.articleSidebarAds,
   };
 }
 

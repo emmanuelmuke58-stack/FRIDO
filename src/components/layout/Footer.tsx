@@ -267,6 +267,18 @@ export function Footer() {
 
 export function MobileBottomNav() {
   const { t } = useLanguage();
+  const [hiddenByDetailCta, setHiddenByDetailCta] = React.useState(false);
+
+  React.useEffect(() => {
+    const onToggle = (e: Event) => {
+      const detail = (e as CustomEvent<{ hidden?: boolean }>).detail;
+      setHiddenByDetailCta(Boolean(detail?.hidden));
+    };
+    window.addEventListener('toggle-mobile-bottom-nav', onToggle);
+    return () => window.removeEventListener('toggle-mobile-bottom-nav', onToggle);
+  }, []);
+
+  if (hiddenByDetailCta) return null;
 
   return (
     <nav

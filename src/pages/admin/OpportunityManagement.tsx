@@ -5,7 +5,7 @@ import { Opportunity } from '../../types';
 import {
   Plus, Trash2, Edit, Search, Save, Globe, Clock, ChevronLeft,
   MapPin, Building2, Link as LinkIcon, DollarSign, AlertCircle, Eye, EyeOff, RotateCcw,
-  Image as ImageIcon, Upload, Camera, ArrowLeft, ArrowRight, X
+  Image as ImageIcon, Upload, Camera, ArrowLeft, ArrowRight, X, Mail, GraduationCap, Briefcase
 } from 'lucide-react';
 import {
   logActivity,
@@ -53,6 +53,7 @@ export function OpportunityManagement() {
   const [loading, setLoading] = React.useState(true);
   const [editorMode, setEditorMode] = React.useState<'list'| 'edit'>('list');
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [relatedOppSearch, setRelatedOppSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<'all'| 'active'| 'draft'| 'expired'| 'deleted'>('all');
   const [currentOpp, setCurrentOpp] = React.useState<Partial<Opportunity>>({});
 
@@ -106,7 +107,7 @@ export function OpportunityManagement() {
   const activeOpps = React.useMemo(() => allOpps.filter(o => o.status !== 'deleted'), [allOpps]);
   const deletedOpps = React.useMemo(() => allOpps.filter(o => o.status === 'deleted'), [allOpps]);
 
-  const handleSave = async (status: 'active'| 'draft'= 'active') => {
+  const handleSave = async (statusOverride?: 'active' | 'draft' | 'expired') => {
     if (!currentOpp.title?.trim() || !currentOpp.organization?.trim()) {
       setFeedback({ type: 'error', message: 'Title and Organization are required.'});
       return;
@@ -117,31 +118,58 @@ export function OpportunityManagement() {
       const deadline = rest.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       const parsedDeadline = safeDate(deadline);
       const isExpired = parsedDeadline ? isBefore(parsedDeadline, new Date()) : false;
-      const finalStatus = status === 'active'&& isExpired ? 'expired': status;
+      const requestedStatus: 'active' | 'draft' | 'expired' =
+        statusOverride || (rest.status === 'draft' || rest.status === 'expired' ? rest.status : 'active');
+      const finalStatus = requestedStatus === 'active' && isExpired ? 'expired' : requestedStatus;
       const resolvedAuthorId = rest.authorId || auth.currentUser?.uid || null;
 
       const galleryCleaned = Array.isArray(rest.galleryImages)
         ? rest.galleryImages.filter((u): u is string => typeof u === 'string' && u.trim().length > 0).slice(0, 8).map(u => u.slice(0, 2000))
         : undefined;
 
+      const relatedCleaned = Array.from(new Set(rest.relatedOpportunityIds || []))
+        .filter((rid): rid is string => typeof rid === 'string' && rid.trim().length > 0 && rid !== id)
+        .slice(0, 10);
+
+      const cleanRichField = (val?: string, maxLen = 50000) =>
+        val && val !== '<p></p>' && val !== '<p><br></p>' ? val.slice(0, maxLen) : undefined;
+
       const data = stripUndefined({
         ...rest,
         title: currentOpp.title.trim().slice(0, 200),
         organization: currentOpp.organization.trim().slice(0, 200),
-        organizationLogo: (rest.organizationLogo || '').slice(0, 2000) || undefined,
-        coverImageUrl: (rest.coverImageUrl || '').slice(0, 2000) || undefined,
+        organizationLogo: (rest.organizationLogo || '').trim().slice(0, 2000) || undefined,
+        coverImageUrl: (rest.coverImageUrl || '').trim().slice(0, 2000) || undefined,
         galleryImages: galleryCleaned && galleryCleaned.length > 0 ? galleryCleaned : undefined,
         category: rest.category || pathCategory,
+        subCategory: (rest.subCategory || '').trim().slice(0, 100) || undefined,
         slug: generateSlug(rest.slug || currentOpp.title).slice(0, 200),
         status: finalStatus,
-        description: rest.description || '<p></p>',
-        location: (rest.location || 'Kigali, Rwanda').slice(0, 200),
-        type: (rest.type || 'Full-time').slice(0, 100),
-        applyUrl: (rest.applyUrl || '').slice(0, 2000),
-        downloadUrl: (rest.downloadUrl || '').slice(0, 2000) || undefined,
-        createdAt: rest.createdAt || new Date().toISOString(),
-        deadline,
+        summary: (rest.summary || '').trim().slice(0, 1000) || undefined,
+        description: (rest.description || '<p></p>').slice(0, 100000),
+        responsibilities: cleanRichField(rest.responsibilities),
+        qualifications: cleanRichField(rest.qualifications),
+        requirements: cleanRichField(rest.requirements),
+        skills: cleanRichField(rest.skills),
+        benefits: cleanRichField(rest.benefits),
+        requiredDocuments: cleanRichField(rest.requiredDocuments, 20000),
+        applicationInstructions: cleanRichField(rest.applicationInstructions),
+        tenderRef: (rest.tenderRef || '').trim().slice(0, 100) || undefined,
+        location: (rest.location || '').trim().slice(0, 200) || undefined,
+        type: (rest.type || '').trim().slice(0, 100) || undefined,
+        experienceRequired: (rest.experienceRequired || '').trim().slice(0, 200) || undefined,
+        educationRequired: (rest.educationRequired || '').trim().slice(0, 300) || undefined,
+        salary: (rest.salary || '').trim().slice(0, 100) || undefined,
+        applyUrl: (rest.applyUrl || '').trim().slice(0, 2000),
+        applyEmail: (rest.applyEmail || '').trim().slice(0, 150) || undefined,
+        downloadUrl: (rest.downloadUrl || '').trim().slice(0, 2000) || undefined,
+        publishedAt: (rest.publishedAt || rest.createdAt || new Date().toISOString()).slice(0, 64),
+        createdAt: (rest.createdAt || new Date().toISOString()).slice(0, 64),
+        deadline: deadline.slice(0, 64),
         authorId: resolvedAuthorId,
+        relatedOpportunityIds: relatedCleaned.length > 0 ? relatedCleaned : undefined,
+        seoTitle: (rest.seoTitle || '').trim().slice(0, 120) || undefined,
+        seoDescription: (rest.seoDescription || '').trim().slice(0, 250) || undefined,
         views: Math.max(0, Math.floor(Number(rest.views) || 0)),
         clicks: Math.max(0, Math.floor(Number(rest.clicks) || 0)),
         featured: Boolean(rest.featured)
@@ -394,7 +422,7 @@ export function OpportunityManagement() {
             <button onClick={() => handleSave('draft')} className="flex-1 sm:flex-none min-h-[44px] px-4 sm:px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all">
               Save Draft
             </button>
-            <button onClick={() => handleSave('active')} className="flex-1 sm:flex-none min-h-[44px] px-4 sm:px-6 py-2.5 bg-[#083D91] hover:bg-[#07366D] text-white rounded-xl text-sm font-bold transition-all shadow-lg flex items-center justify-center gap-2">
+            <button onClick={() => handleSave(currentOpp.status === 'expired' ? 'expired' : 'active')} className="flex-1 sm:flex-none min-h-[44px] px-4 sm:px-6 py-2.5 bg-[#083D91] hover:bg-[#07366D] text-white rounded-xl text-sm font-bold transition-all shadow-lg flex items-center justify-center gap-2">
               <Save size={18} /> {currentOpp.id ? 'Update': 'Publish'} Opportunity
             </button>
           </div>
@@ -417,28 +445,50 @@ export function OpportunityManagement() {
               </div>
 
               <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Short Introduction / Excerpt</label>
+                <textarea
+                  rows={3}
+                  maxLength={1000}
+                  className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm resize-y"
+                  placeholder="Brief introduction displayed beside the featured image on the single page..."
+                  value={currentOpp.summary || ''}
+                  onChange={e => setCurrentOpp({ ...currentOpp, summary: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Description</label>
                 <RichTextEditor value={currentOpp.description || ''} onChange={val => setCurrentOpp({ ...currentOpp, description: val })} placeholder="Enter full description..."/>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Responsibilities / Scope</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Key Responsibilities / Scope</label>
                 <RichTextEditor value={currentOpp.responsibilities || ''} onChange={val => setCurrentOpp({ ...currentOpp, responsibilities: val })} placeholder="Key responsibilities or scope..."/>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Requirements & Eligibility</label>
-                <RichTextEditor value={currentOpp.requirements || ''} onChange={val => setCurrentOpp({ ...currentOpp, requirements: val })} placeholder="What are the requirements?"/>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Requirements & Qualifications</label>
+                <RichTextEditor value={currentOpp.requirements || ''} onChange={val => setCurrentOpp({ ...currentOpp, requirements: val })} placeholder="Required education, experience, and qualifications..."/>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Benefits / Award Coverage</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Skills & Competencies</label>
+                <RichTextEditor value={currentOpp.skills || ''} onChange={val => setCurrentOpp({ ...currentOpp, skills: val })} placeholder="Technical or soft skills required (optional)..."/>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Benefits / Award Coverage (Optional)</label>
                 <RichTextEditor value={currentOpp.benefits || ''} onChange={val => setCurrentOpp({ ...currentOpp, benefits: val })} placeholder="Compensation, tuition coverage, or benefits..."/>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Application Instructions</label>
-                <RichTextEditor value={currentOpp.applicationInstructions || ''} onChange={val => setCurrentOpp({ ...currentOpp, applicationInstructions: val })} placeholder="How to apply?"/>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Required Documents (Optional)</label>
+                <RichTextEditor value={currentOpp.requiredDocuments || ''} onChange={val => setCurrentOpp({ ...currentOpp, requiredDocuments: val })} placeholder="List CV, cover letter, certificates, or required application documents..."/>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">How to Apply / Application Instructions</label>
+                <RichTextEditor value={currentOpp.applicationInstructions || ''} onChange={val => setCurrentOpp({ ...currentOpp, applicationInstructions: val })} placeholder="Detailed instructions on how candidates should apply..."/>
               </div>
             </div>
           </div>
@@ -474,6 +524,19 @@ export function OpportunityManagement() {
                 </div>
 
                 <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</label>
+                  <select
+                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm"
+                    value={currentOpp.status === 'draft' || currentOpp.status === 'expired' ? currentOpp.status : 'active'}
+                    onChange={e => setCurrentOpp({ ...currentOpp, status: e.target.value as Opportunity['status'] })}
+                  >
+                    <option value="active">Active (Published)</option>
+                    <option value="draft">Draft (Hidden)</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Organization / Institution</label>
                   <div className="relative">
                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -485,25 +548,60 @@ export function OpportunityManagement() {
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Location</label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" value={currentOpp.location || ''} onChange={e => setCurrentOpp({ ...currentOpp, location: e.target.value })} />
+                    <input className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" placeholder="e.g. Kigali, Rwanda" value={currentOpp.location || ''} onChange={e => setCurrentOpp({ ...currentOpp, location: e.target.value })} />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Employment / Funding Type</label>
-                  <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" placeholder="e.g. Full-time, Fully Funded, Open Tender" value={currentOpp.type || ''} onChange={e => setCurrentOpp({ ...currentOpp, type: e.target.value })} />
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contract / Employment Type</label>
+                  <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" placeholder="e.g. Full-Time, Part-Time, Contract, Internship, Remote" value={currentOpp.type || ''} onChange={e => setCurrentOpp({ ...currentOpp, type: e.target.value })} />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Salary / Award Value</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Job / Tender Reference No. (Optional)</label>
+                  <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-mono" placeholder="e.g. RO-2026-041" maxLength={100} value={currentOpp.tenderRef || ''} onChange={e => setCurrentOpp({ ...currentOpp, tenderRef: e.target.value })} />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Experience Required (Optional)</label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" placeholder="e.g. 2+ Years" value={currentOpp.experienceRequired || ''} onChange={e => setCurrentOpp({ ...currentOpp, experienceRequired: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Education Required (Optional)</label>
+                  <div className="relative">
+                    <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" placeholder="e.g. Bachelor's Degree" value={currentOpp.educationRequired || ''} onChange={e => setCurrentOpp({ ...currentOpp, educationRequired: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Salary / Remuneration (Optional)</label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" placeholder="Competitive / Full Tuition" value={currentOpp.salary || ''} onChange={e => setCurrentOpp({ ...currentOpp, salary: e.target.value })} />
+                    <input className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" placeholder="Leave blank if undisclosed" value={currentOpp.salary || ''} onChange={e => setCurrentOpp({ ...currentOpp, salary: e.target.value })} />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Deadline</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Publication Date</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm"
+                    value={safeFormatDate(currentOpp.publishedAt || currentOpp.createdAt, "yyyy-MM-dd'T'HH:mm", '')}
+                    onChange={e => {
+                      if (e.target.value) {
+                        setCurrentOpp({ ...currentOpp, publishedAt: new Date(e.target.value).toISOString() });
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Application Deadline</label>
                   <input
                     type="date" className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm" value={safeFormatDate(currentOpp.deadline, 'yyyy-MM-dd', '')}
                     onChange={e => {
@@ -660,10 +758,23 @@ export function OpportunityManagement() {
             </div>
 
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-5">
-              <h3 className="font-bold flex items-center gap-2"><LinkIcon size={18} className="text-teal-500"/> Links & Attachments</h3>
+              <h3 className="font-bold flex items-center gap-2"><LinkIcon size={18} className="text-teal-500"/> Links & Application Methods</h3>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Official Apply URL</label>
                 <input className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-mono" value={currentOpp.applyUrl || ''} onChange={e => setCurrentOpp({ ...currentOpp, applyUrl: e.target.value })} placeholder="https://..."/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Employer Application Email (Optional)</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="email"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm"
+                    value={currentOpp.applyEmail || ''}
+                    onChange={e => setCurrentOpp({ ...currentOpp, applyEmail: e.target.value })}
+                    placeholder="careers@organization.rw"
+                  />
+                </div>
               </div>
               <FileUploadField
                 label="Tender / Program Document (PDF, DOC, Scan)"
@@ -671,6 +782,86 @@ export function OpportunityManagement() {
                 onChange={(url) => setCurrentOpp({ ...currentOpp, downloadUrl: url })}
                 helperText="Attach official PDF notices, application forms, or scanned schedules."
               />
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-bold text-slate-900 text-sm">Related {pathCategory}</h3>
+                <span className="text-[11px] font-bold text-slate-400">
+                  {(currentOpp.relatedOpportunityIds || []).length}/6 selected
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Optional: Select specific listings to prioritize in the Related {pathCategory} sidebar.
+              </p>
+              <input
+                type="search"
+                placeholder={`Search ${pathCategory.toLowerCase()} to link...`}
+                value={relatedOppSearch}
+                onChange={e => setRelatedOppSearch(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs"
+              />
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                {activeOpps
+                  .filter(o => o.id !== currentOpp.id && (!relatedOppSearch.trim() || o.title.toLowerCase().includes(relatedOppSearch.trim().toLowerCase()) || o.organization.toLowerCase().includes(relatedOppSearch.trim().toLowerCase())))
+                  .slice(0, 30)
+                  .map(candidate => {
+                    const selectedList = currentOpp.relatedOpportunityIds || [];
+                    const isChecked = selectedList.includes(candidate.id);
+                    return (
+                      <label
+                        key={candidate.id}
+                        className={cn(
+                          "flex items-start gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-colors",
+                          isChecked ? "bg-teal-50/70 border-teal-200 text-[#102B4E]" : "bg-slate-50/60 border-slate-100 text-slate-600 hover:bg-slate-100/70"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={!isChecked && selectedList.length >= 6}
+                          onChange={() => {
+                            const next = isChecked
+                              ? selectedList.filter(rid => rid !== candidate.id)
+                              : [...selectedList, candidate.id].slice(0, 6);
+                            setCurrentOpp({ ...currentOpp, relatedOpportunityIds: next });
+                          }}
+                          className="mt-0.5 rounded border-slate-300 text-[#083D91]"
+                        />
+                        <div className="min-w-0">
+                          <div className="line-clamp-1 font-medium leading-snug">{candidate.title}</div>
+                          <div className="text-[10px] text-slate-400 truncate">{candidate.organization}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-slate-900 text-sm">SEO Metadata (Optional)</h3>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SEO Title</label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder="Custom browser/search title..."
+                  className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs"
+                  value={currentOpp.seoTitle || ''}
+                  onChange={e => setCurrentOpp({ ...currentOpp, seoTitle: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SEO Description</label>
+                <textarea
+                  rows={2}
+                  maxLength={250}
+                  placeholder="Custom search engine description..."
+                  className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs resize-none"
+                  value={currentOpp.seoDescription || ''}
+                  onChange={e => setCurrentOpp({ ...currentOpp, seoDescription: e.target.value })}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -697,15 +888,32 @@ export function OpportunityManagement() {
           </NavLink>
           <button
             onClick={() => {
+              setRelatedOppSearch('');
               setCurrentOpp({
                 status: 'active',
                 category: pathCategory,
                 type: 'Full-time',
                 location: 'Kigali, Rwanda',
+                publishedAt: new Date().toISOString(),
                 deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                summary: '',
                 description: '',
+                responsibilities: '',
                 requirements: '',
-                applicationInstructions: ''});
+                skills: '',
+                benefits: '',
+                requiredDocuments: '',
+                applicationInstructions: '',
+                tenderRef: '',
+                applyUrl: '',
+                applyEmail: '',
+                experienceRequired: '',
+                educationRequired: '',
+                salary: '',
+                relatedOpportunityIds: [],
+                seoTitle: '',
+                seoDescription: ''
+              });
               setEditorMode('edit');
             }}
             className="flex-1 sm:flex-none min-h-[44px] bg-[#083D91] hover:bg-[#07366D] text-white px-5 sm:px-6 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition-all">
@@ -793,7 +1001,7 @@ export function OpportunityManagement() {
                       <button onClick={() => toggleStatus(opp)} className="min-w-[36px] min-h-[36px] p-1.5 text-slate-400 hover:text-[#083D91] flex items-center justify-center rounded-lg hover:bg-slate-50" title={opp.status === 'active'? 'Unpublish': 'Publish'}>
                         {opp.status === 'active'? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
-                      <button onClick={() => { setCurrentOpp(opp); setEditorMode('edit'); }} className="min-w-[36px] min-h-[36px] p-1.5 text-slate-400 hover:text-teal-600 flex items-center justify-center rounded-lg hover:bg-slate-50" title="Edit"><Edit size={16} /></button>
+                      <button onClick={() => { setRelatedOppSearch(''); setCurrentOpp(opp); setEditorMode('edit'); }} className="min-w-[36px] min-h-[36px] p-1.5 text-slate-400 hover:text-teal-600 flex items-center justify-center rounded-lg hover:bg-slate-50" title="Edit"><Edit size={16} /></button>
                     </div>
                   )}
                 </div>

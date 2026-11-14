@@ -24,6 +24,7 @@
         "tags": { "type": "array", "items": { "type": "string" } },
         "seoTitle": { "type": "string", "maxLength": 120 },
         "seoDescription": { "type": "string", "maxLength": 250 },
+        "relatedArticleIds": { "type": "array", "items": { "type": "string" } },
         "deletedAt": { "type": "string", "format": "date-time" },
         "deletedBy": { "type": "string", "maxLength": 128 },
         "deletedByName": { "type": "string", "maxLength": 150 },
@@ -45,23 +46,32 @@
         "galleryImages": { "type": "array", "items": { "type": "string" } },
         "location": { "type": "string", "maxLength": 200 },
         "deadline": { "type": "string", "format": "date-time" },
+        "publishedAt": { "type": "string", "format": "date-time" },
         "category": { "type": "string", "enum": ["Jobs", "Scholarships", "Tenders", "Others"] },
         "subCategory": { "type": "string", "maxLength": 100 },
         "type": { "type": "string", "maxLength": 100 },
+        "experienceRequired": { "type": "string", "maxLength": 200 },
+        "educationRequired": { "type": "string", "maxLength": 300 },
         "salary": { "type": "string", "maxLength": 100 },
+        "summary": { "type": "string", "maxLength": 1000 },
         "description": { "type": "string", "maxLength": 100000 },
         "responsibilities": { "type": "string", "maxLength": 50000 },
         "qualifications": { "type": "string", "maxLength": 50000 },
         "requirements": { "type": "string", "maxLength": 50000 },
+        "skills": { "type": "string", "maxLength": 50000 },
         "benefits": { "type": "string", "maxLength": 50000 },
         "applicationInstructions": { "type": "string", "maxLength": 50000 },
         "applyUrl": { "type": "string", "maxLength": 2000 },
+        "applyEmail": { "type": "string", "maxLength": 150 },
         "status": { "type": "string", "enum": ["active", "draft", "expired", "deleted"] },
         "views": { "type": "integer" },
         "clicks": { "type": "integer" },
         "createdAt": { "type": "string", "format": "date-time" },
         "featured": { "type": "boolean" },
         "authorId": { "type": "string", "maxLength": 128 },
+        "relatedOpportunityIds": { "type": "array", "items": { "type": "string" } },
+        "seoTitle": { "type": "string", "maxLength": 120 },
+        "seoDescription": { "type": "string", "maxLength": 250 },
         "institution": { "type": "string", "maxLength": 200 },
         "country": { "type": "string", "maxLength": 100 },
         "scholarshipType": { "type": "string", "maxLength": 100 },
@@ -332,8 +342,36 @@
             "featuredOpportunityIds": { "type": "array", "items": { "type": "string" } },
             "promoBanners": { "type": "object" }
           }
+        },
+        "articleSidebarAds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "imageUrl": { "type": "string" },
+              "linkUrl": { "type": "string" },
+              "label": { "type": "string" },
+              "enabled": { "type": "boolean" },
+              "order": { "type": "integer" }
+            }
+          }
         }
       }
+    },
+    "ArticleComment": {
+      "title": "Article Comment",
+      "description": "A reader comment on a published news article",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 80 },
+        "content": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["approved", "hidden"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["articleId", "authorName", "content", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -396,6 +434,10 @@
     "settings": {
       "schema": "Settings",
       "description": "Global website settings"
+    },
+    "comments": {
+      "schema": "ArticleComment",
+      "description": "Collection of reader comments on news articles"
     }
   }
 }
