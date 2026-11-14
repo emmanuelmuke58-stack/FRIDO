@@ -3,6 +3,8 @@ import { auth, db } from '../lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Bot, BriefcaseBusiness, FileUser, MessageCircle, ShieldCheck, Sparkles } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
 type Task = 'career' | 'job_match' | 'cv_review' | 'job_description' | 'admin_assistant';
 
 const tools: { id: Task; label: string; description: string; icon: React.ElementType }[] = [
@@ -44,7 +46,7 @@ export function AiHubPage() {
         if (!user) throw new Error('Please sign in before using this feature.');
         headers.Authorization = `Bearer ${await user.getIdToken()}`;
       }
-      const response = await fetch('/api/ai/assist', {
+      const response = await fetch(`${API_BASE_URL}/api/ai/assist`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ task, input: payload }),
