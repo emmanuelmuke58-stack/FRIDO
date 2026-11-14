@@ -5,6 +5,7 @@ import multer from 'multer';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
+import http from 'http';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -956,11 +957,37 @@ async function startServer() {
     });
   });
 
+  const httpServer = http.createServer(app);
+
   if (!isProd) {
+    const hmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: hmrDisabled ? false : { server: httpServer },
+      },
       appType: 'custom',
     });
+
+    if (hmrDisabled) {
+      app.get('/@vite/client', async (_req, res, next) => {
+        try {
+          const transformed = await vite.transformRequest('/@vite/client');
+          if (!transformed) {
+            next();
+            return;
+          }
+          const patched = transformed.code.replace(
+            'transport.connect(createHMRHandler(handleMessage));',
+            '/* HMR WebSocket disabled via DISABLE_HMR=true */'
+          );
+          res.status(200).set({ 'Content-Type': 'application/javascript; charset=utf-8' }).end(patched);
+        } catch (err) {
+          next(err);
+        }
+      });
+    }
+
     app.use(vite.middlewares);
 
     app.use('*', async (req, res, next) => {
@@ -981,7 +1008,7 @@ async function startServer() {
     });
   }
 
-  app.listen(port, () => {
+  httpServer.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
   });
 }
