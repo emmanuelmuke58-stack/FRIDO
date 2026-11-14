@@ -441,6 +441,7 @@ const uploadMiddleware = multer({
 
 async function startServer() {
   const app = express();
+  app.set('trust proxy', 1);
   const isProd = process.env.NODE_ENV === 'production';
   const port = process.env.PORT || 3000;
 
@@ -481,11 +482,18 @@ async function startServer() {
         return;
       }
 
-      const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+      const ip = req.ip || req.socket.remoteAddress || 'unknown';
       const now = Date.now();
+      for (const [key, value] of aiRequestCounts) {
+        if (value.resetAt <= now) aiRequestCounts.delete(key);
+      }
       const bucket = aiRequestCounts.get(ip);
       if (bucket && bucket.resetAt > now && bucket.count >= 20) {
         res.status(429).json({ error: 'Too many AI requests. Please try again in a minute.' });
+        return;
+      }
+      if (!bucket && aiRequestCounts.size >= 5000) {
+        res.status(429).json({ error: 'AI service is busy. Please try again shortly.' });
         return;
       }
       if (!bucket || bucket.resetAt <= now) aiRequestCounts.set(ip, { count: 1, resetAt: now + 60_000 });
