@@ -444,6 +444,106 @@ async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
   const port = process.env.PORT || 3000;
 
+
+  // OpenAI-powered FRIDO assistant. The API key is read only on the server.
+  app.use(express.json({ limit: '48kb' }));
+
+  const aiRequestCounts = new Map<string, { count: number; resetAt: number }>();
+  const AI_TASKS = new Set(['career', 'job_match', 'cv_review', 'job_description', 'admin_assistant']);
+
+  app.post('/api/ai/assist', async (req: Request, res: ExpressResponse) => {
+    try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        res.status(503).json({ error: 'AI service is not configured yet. Please contact the FRIDO administrator.' });
+        return;
+      }
+
+      const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+      const now = Date.now();
+      const bucket = aiRequestCounts.get(ip);
+      if (bucket && bucket.resetAt > now && bucket.count >= 20) {
+        res.status(429).json({ error: 'Too many AI requests. Please try again in a minute.' });
+        return;
+      }
+      if (!bucket || bucket.resetAt <= now) aiRequestCounts.set(ip, { count: 1, resetAt: now + 60_000 });
+      else bucket.count += 1;
+
+      const { task, input } = req.body || {};
+      if (!AI_TASKS.has(task) || !input || typeof input !== 'object' || Array.isArray(input)) {
+        res.status(400).json({ error: 'Invalid AI request.' });
+        return;
+      }
+
+      const requiresAuth = task !== 'career';
+      let actor: VerifiedUser | null = null;
+      if (requiresAuth) {
+        const idToken = parseBearerToken(req);
+        if (!idToken) {
+          res.status(401).json({ error: 'Please sign in to use this FRIDO AI feature.' });
+          return;
+        }
+        try {
+          actor = await verifyFirebaseIdToken(idToken);
+        } catch {
+          res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+          return;
+        }
+      }
+
+      if (task === 'job_description' || task === 'admin_assistant') {
+        const idToken = parseBearerToken(req);
+        const userResp = await firestoreRequest(`users/${actor!.uid}`, 'GET', idToken!);
+        if (!userResp.ok) {
+          res.status(403).json({ error: 'Administrator access is required.' });
+          return;
+        }
+        const userDoc = await userResp.json() as { fields?: Record<string, FirestoreValue> };
+        const role = readFsString(userDoc.fields, 'role') || '';
+        const status = readFsString(userDoc.fields, 'status') || 'active';
+        if (!['super_admin', 'admin', 'editor'].includes(role) || status === 'suspended') {
+          res.status(403).json({ error: 'You do not have permission to use this AI tool.' });
+          return;
+        }
+      }
+
+      const safeInput = JSON.stringify(input).slice(0, 24_000);
+      const instructions: Record<string, string> = {
+        career: 'You are FRIDO Career Assistant for people seeking jobs and opportunities in Rwanda. Give practical, honest career guidance in clear English. Never invent vacancies, employers, deadlines, salaries, or application links. If asked about a specific live vacancy, explain that the user should verify details on its listing.',
+        job_match: 'You are FRIDO Smart Job Matching. Compare the applicant profile with the supplied job listings. Return the strongest matches first, explain evidence for each match, identify missing qualifications, and never invent requirements. Clearly say when no strong match exists.',
+        cv_review: 'You are FRIDO CV Assistant. Review the supplied CV text for clarity, structure, grammar, measurable achievements, and relevance. Do not invent qualifications or work history. Provide improved wording only from facts supplied and flag information the applicant must verify.',
+        job_description: 'You are FRIDO Job Description Generator for authorized administrators. Draft inclusive, clear job listings from supplied employer facts. Do not invent employer details, salary, benefits, qualifications, location, or deadline; mark missing information as [Please provide].',
+        admin_assistant: 'You are FRIDO Admin Assistant. Help administrators interpret the supplied information, plan content operations, and draft communications. Do not claim to have changed records or performed actions. Never expose personal data unnecessarily.',
+      };
+
+      const aiResp = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+          instructions: instructions[task],
+          input: safeInput,
+          max_output_tokens: 1200,
+        }),
+      });
+      const aiData = await aiResp.json() as { output_text?: string; error?: { message?: string }; output?: Array<{ content?: Array<{ text?: string }> }> };
+      if (!aiResp.ok) {
+        console.error('OpenAI request failed:', aiData.error?.message || aiResp.status);
+        res.status(502).json({ error: 'The AI service could not complete this request. Please try again.' });
+        return;
+      }
+      const outputText = aiData.output_text || aiData.output?.flatMap(item => item.content || []).map(part => part.text || '').join('\n').trim();
+      if (!outputText) {
+        res.status(502).json({ error: 'The AI service returned an empty response. Please try again.' });
+        return;
+      }
+      res.json({ result: outputText });
+    } catch (err) {
+      console.error('FRIDO AI endpoint error:', err);
+      res.status(500).json({ error: 'Unexpected AI service error.' });
+    }
+  });
+
   // 1. Upload endpoint (device picker, camera capture, drag-drop, cropped blobs, docs)
   app.post(
     '/api/media/upload',
