@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Search, ChevronDown, MapPin, Calendar as CalendarIcon, X, Globe } from 'lucide-react';
 import { Facebook, Twitter, Linkedin, Youtube } from '../ui/SocialIcons';
+import { PWAInstallButton } from '../ui/PWAInstallButton';
 import { cn } from '@/src/lib/utils';
 import { useSettings } from '@/src/lib/SettingsContext';
 import { useLanguage } from '@/src/lib/LanguageContext';
@@ -90,6 +91,7 @@ export function TopBar() {
               ))}
             </div>
           )}
+          <PWAInstallButton variant="topbar" />
         </div>
       </div>
     </div>
@@ -335,7 +337,8 @@ export function Navbar() {
           </nav>
 
           {/* Mobile & Tablet Actions (< 1024px) */}
-          <div className="flex items-center gap-0.5 lg:hidden">
+          <div className="flex items-center gap-1 lg:hidden">
+            <PWAInstallButton variant="mobile-header" />
             <button
               type="button" onClick={() => setSearchOpen((prev) => !prev)}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#102B4E] active:bg-slate-100 rounded-full transition-colors" aria-label={t('nav.search')}
@@ -475,6 +478,9 @@ export function Navbar() {
                 <NavLink to="/terms" onClick={() => setMenuOpen(false)} className="hover:text-[#083D91]">
                   {t('footer.terms')}
                 </NavLink>
+              </div>
+              <div className="pt-3">
+                <PWAInstallButton variant="drawer" />
               </div>
             </nav>
 

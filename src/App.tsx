@@ -23,6 +23,7 @@ import { TrashManagement } from './pages/admin/TrashManagement';
 import { SearchPage } from './pages/SearchPage';
 import { StaticPage } from './pages/StaticPage';
 import { ContactPage } from './pages/ContactPage';
+import { OfflineIndicator } from './components/ui/OfflineIndicator';
 
 const routerBasename =
   typeof window !== 'undefined'&&
@@ -32,6 +33,7 @@ const routerBasename =
 export default function App() {
   return (
     <Router basename={routerBasename}>
+      <OfflineIndicator />
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Layout />}>

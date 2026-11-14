@@ -243,10 +243,10 @@ export function NewsDetailPage() {
       <div className="bg-white min-h-screen">
         <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 md:pt-10 pb-16">
           <div className="space-y-5 animate-pulse">
+            <div className="h-[240px] sm:h-[380px] md:h-[460px] bg-slate-200 rounded-xl sm:rounded-2xl w-full" />
             <div className="h-3.5 bg-teal-100 rounded w-28" />
             <div className="h-9 sm:h-11 bg-slate-200 rounded w-full" />
             <div className="h-9 sm:h-11 bg-slate-200 rounded w-4/5" />
-            <div className="h-[240px] sm:h-[380px] md:h-[460px] bg-slate-200 rounded-xl sm:rounded-2xl w-full" />
             <div className="flex items-center justify-between py-3 border-y border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-full bg-slate-200" />
@@ -339,38 +339,8 @@ export function NewsDetailPage() {
         </nav>
 
         <article className="w-full min-w-0">
-          {/* 1. Article Category */}
-          {article.category && (
-            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-[#14B8A6] mb-2 sm:mb-3">
-              <NavLink
-                to={`/news/category/${categorySlug}`}
-                className="hover:text-[#083D91] transition-colors"
-              >
-                {article.category}
-              </NavLink>
-              {article.featured && (
-                <>
-                  <span aria-hidden="true" className="text-slate-300">·</span>
-                  <span className="text-[#083D91]">{t('news.leadStory')}</span>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* 2. Article Title & Optional Subtitle */}
-          <header className="mb-4 sm:mb-6">
-            <h1 className="text-[22px] leading-[1.28] sm:text-[28px] sm:leading-[1.22] md:text-[34px] md:leading-[1.18] lg:text-[40px] lg:leading-[1.15] font-bold text-[#102B4E] tracking-tight break-words text-balance">
-              {article.headline}
-            </h1>
-            {article.subtitle && (
-              <p className="mt-2.5 sm:mt-3.5 text-[15px] sm:text-base md:text-lg text-slate-600 leading-relaxed font-normal">
-                {article.subtitle}
-              </p>
-            )}
-          </header>
-
-          {/* 3. Featured Image (Full-width single column, preserves original aspect ratio) */}
-          <figure className="mb-4 sm:mb-5 w-full">
+          {/* 1. Featured Image at Top (Full-width single column, preserves original aspect ratio) */}
+          <figure className="mb-5 sm:mb-6 w-full">
             <button
               type="button"
               onClick={() => setZoomedImage(resolvedHeroImg)}
@@ -396,6 +366,36 @@ export function NewsDetailPage() {
               </figcaption>
             )}
           </figure>
+
+          {/* 2. Article Category (Directly under Featured Image) */}
+          {article.category && (
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-[#14B8A6] mb-2 sm:mb-3">
+              <NavLink
+                to={`/news/category/${categorySlug}`}
+                className="hover:text-[#083D91] transition-colors"
+              >
+                {article.category}
+              </NavLink>
+              {article.featured && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300">·</span>
+                  <span className="text-[#083D91]">{t('news.leadStory')}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 3. Article Title & Optional Subtitle (Under Featured Image) */}
+          <header className="mb-4 sm:mb-5">
+            <h1 className="text-[22px] leading-[1.28] sm:text-[28px] sm:leading-[1.22] md:text-[34px] md:leading-[1.18] lg:text-[40px] lg:leading-[1.15] font-bold text-[#102B4E] tracking-tight break-words text-balance">
+              {article.headline}
+            </h1>
+            {article.subtitle && (
+              <p className="mt-2.5 sm:mt-3.5 text-[15px] sm:text-base md:text-lg text-slate-600 leading-relaxed font-normal">
+                {article.subtitle}
+              </p>
+            )}
+          </header>
 
           {/* 4. Author Profile & Publication Date (Compact horizontal row below Featured Image) */}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 sm:py-3.5 border-y border-slate-200/80 mb-4 sm:mb-5 min-w-0">

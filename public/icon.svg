@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A4AB2" />
+      <stop offset="100%" stop-color="#062C6B" />
+    </linearGradient>
+    <linearGradient id="tealGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2DD4BF" />
+      <stop offset="100%" stop-color="#14B8A6" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <circle cx="256" cy="256" r="168" fill="none" stroke="url(#tealGlow)" stroke-width="24" opacity="0.28" />
+  <!-- Stylized rising beacon / R monogram -->
+  <path
+    d="M172 368V154h92c54 0 88 31 88 78 0 36-21 63-55 72l62 64h-58l-54-58h-30v58h-45zm45-99h44c27 0 43-14 43-37s-16-36-43-36h-44v73z"
+    fill="#FFFFFF"
+  />
+  <!-- Teal upward opportunity spark / sun dot -->
+  <circle cx="356" cy="144" r="30" fill="url(#tealGlow)" />
+</svg>

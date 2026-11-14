@@ -8,8 +8,11 @@ import '@fontsource/google-sans/700-italic.css';
 import App from './App.tsx';
 import './index.css';
 
+import { registerSW } from 'virtual:pwa-register';
 import { SettingsProvider } from './lib/SettingsContext';
 import { LanguageProvider } from './lib/LanguageContext';
+
+registerSW({ immediate: true });
 
 createRoot(document.getElementById('root')!).render(
   <LanguageProvider>

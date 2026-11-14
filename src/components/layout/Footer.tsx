@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Facebook, Twitter, Linkedin, Youtube } from '../ui/SocialIcons';
+import { PWAInstallButton } from '../ui/PWAInstallButton';
 import { cn } from '@/src/lib/utils';
 import { useSettings } from '@/src/lib/SettingsContext';
 import { useLanguage } from '@/src/lib/LanguageContext';
@@ -185,6 +186,9 @@ export function Footer() {
                   ))}
                 </div>
               )}
+              <div className="pt-1">
+                <PWAInstallButton variant="footer" />
+              </div>
             </div>
 
             {/* Quick Links */}
