@@ -523,7 +523,7 @@ async function startServer() {
         const userDoc = await userResp.json() as { fields?: Record<string, FirestoreValue> };
         const role = readFsString(userDoc.fields, 'role') || '';
         const status = readFsString(userDoc.fields, 'status') || 'active';
-        if (!['super_admin', 'admin', 'editor'].includes(role) || status === 'suspended') {
+        if (!['super_admin', 'admin', 'editor', 'content_manager'].includes(role) || status !== 'active') {
           res.status(403).json({ error: 'You do not have permission to use this AI tool.' });
           return;
         }
