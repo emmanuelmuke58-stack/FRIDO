@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: frido-api
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npx tsx server.ts
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        value: https://emmanuelmuke58-stack.github.io
