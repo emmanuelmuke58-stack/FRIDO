@@ -17,7 +17,7 @@ The AI features use a separate Express API because GitHub Pages only hosts stati
 5. Confirm `/api/health` returns JSON with status `ok`.
 
 ## 2. Connect GitHub Pages to the API
-Set the Vite build environment variable `VITE_API_BASE_URL` to the Render service origin, for example `https://frido-api.onrender.com` (use the actual URL assigned by Render, without a trailing slash). Add it to the GitHub Actions Pages build environment and rebuild the site.
+After Render creates the service, copy its actual service origin (for example `https://frido-api.onrender.com`, without a trailing slash). In GitHub, open **Settings → Secrets and variables → Actions → Variables → New repository variable** and create `VITE_API_BASE_URL` with that origin as its value. The Pages workflow reads this variable during the Vite build. Re-run the Pages workflow after setting it.
 
 The API already allows the FRIDO GitHub Pages origin. If the site moves to another domain, update `FRONTEND_ORIGIN` on Render.
 
