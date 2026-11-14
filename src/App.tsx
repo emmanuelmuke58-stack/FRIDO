@@ -23,6 +23,7 @@ import { TrashManagement } from './pages/admin/TrashManagement';
 import { SearchPage } from './pages/SearchPage';
 import { StaticPage } from './pages/StaticPage';
 import { ContactPage } from './pages/ContactPage';
+import { AiHubPage } from './pages/AiHubPage';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
 
 const routerBasename =
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="p/:slug" element={<StaticPage />} />
           <Route path="about" element={<StaticPage />} />
           <Route path="contact" element={<ContactPage />} />
+          <Route path="ai" element={<AiHubPage />} />
           <Route path="privacy" element={<StaticPage />} />
           <Route path="terms" element={<StaticPage />} />
         </Route>
